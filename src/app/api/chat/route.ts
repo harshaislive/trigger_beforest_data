@@ -7,22 +7,35 @@ const convex = new ConvexHttpClient('https://quick-caribou-824.convex.cloud')
 
 const ChatRequestSchema = z.object({
   message: z.string().min(1),
-  telegramUserId: z.string(),
+  telegramUserId: z.string().optional(),
+  instagramUserId: z.string().optional(),
   name: z.string().optional(),
 })
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { message, telegramUserId, name } = ChatRequestSchema.parse(body)
+    const { message, telegramUserId, instagramUserId, name } = ChatRequestSchema.parse(body)
+
+    const userId = telegramUserId || instagramUserId
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'Either telegramUserId or instagramUserId is required' },
+        { status: 400 }
+      )
+    }
 
     // 1. Get or create user in Convex
     // @ts-ignore
-    const userId = await convex.mutation('chat:getOrCreateUser', { telegramUserId, name })
+    const convexUserId = await convex.mutation('chat:getOrCreateUser', { 
+      telegramUserId: telegramUserId || null, 
+      instagramUserId: instagramUserId || null,
+      name 
+    })
 
     // 2. Get chat history for context
     // @ts-ignore
-    const chatHistory = await convex.query('chat:getChatHistory', { userId, limit: 10 })
+    const chatHistory = await convex.query('chat:getChatHistory', { userId: convexUserId, limit: 10 })
     const history = Array.isArray(chatHistory) ? chatHistory : []
 
     // 3. Search knowledge base
@@ -52,7 +65,7 @@ export async function POST(request: NextRequest) {
     // 6. Store the message and response
     // @ts-ignore
     await convex.mutation('chat:storeChatMessage', {
-      userId,
+      userId: convexUserId,
       message,
       response: answer,
       sources,
