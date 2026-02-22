@@ -1,0 +1,10 @@
+[build]
+build_cmd = "npm run build"
+start_cmd = "npm start"
+install_cmd = "npm install"
+
+[phases.setup]
+nixpkgs = ["nodejs_22"]
+
+[cache]
+directives = ["node_modules", ".next"]
