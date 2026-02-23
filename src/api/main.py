@@ -1,8 +1,10 @@
 import os
+import time
+from typing import Optional
+
 import requests
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import Optional
 
 
 app = FastAPI(title="CrewAI ManyChat")
@@ -11,8 +13,18 @@ app = FastAPI(title="CrewAI ManyChat")
 MANYCHAT_API_KEY = os.getenv("MANYCHAT_API_KEY")
 MANYCHAT_API_URL = "https://api.manychat.com/fb/sending/sendContent"
 
-GREETINGS = ["hi", "hello", "hey", "hiya", "good morning", "good evening", 
-             "good afternoon", "what's up", "wassup", "yo"]
+GREETINGS = [
+    "hi",
+    "hello",
+    "hey",
+    "hiya",
+    "good morning",
+    "good evening",
+    "good afternoon",
+    "what's up",
+    "wassup",
+    "yo",
+]
 
 
 class ManyChatRequest(BaseModel):
@@ -30,13 +42,16 @@ class ManyChatResponse(BaseModel):
 
 def is_greeting(message: str) -> bool:
     lower = message.lower().strip()
-    return any(g == lower or lower.startswith(g + " ") or lower.endswith(" " + g) for g in GREETINGS)
+    return any(
+        g == lower or lower.startswith(g + " ") or lower.endswith(" " + g)
+        for g in GREETINGS
+    )
 
 
 def send_manychat_message(subscriber_id: str, message: str) -> dict:
     if not MANYCHAT_API_KEY:
         raise HTTPException(status_code=500, detail="MANYCHAT_API_KEY not configured")
-    
+
     response = requests.post(
         MANYCHAT_API_URL,
         headers={
@@ -60,15 +75,15 @@ def send_manychat_message(subscriber_id: str, message: str) -> dict:
 
 @app.post("/api/chat", response_model=ManyChatResponse)
 async def chat(request: ManyChatRequest):
-    from crewai_manychat.crew import run_crew
-    from crewai_manychat.convex_client import get_convex_client
-    
+    from src.crewai_manychat.convex_client import get_convex_client
+    from src.crewai_manychat.crew import run_crew
+
     if not request.contact_id:
         raise HTTPException(status_code=400, detail="contact_id is required")
-    
+
     if not request.message:
         raise HTTPException(status_code=400, detail="message is required")
-    
+
     try:
         get_convex_client().get_or_create_user(
             instagram_user_id=request.instagramUserId,
@@ -77,7 +92,7 @@ async def chat(request: ManyChatRequest):
         )
     except Exception as e:
         print(f"Convex user error: {e}")
-    
+
     if is_greeting(request.message):
         answer = "Hey. I'm Forest Guide at Beforest. What would you like to know?"
     else:
@@ -90,7 +105,7 @@ async def chat(request: ManyChatRequest):
         except Exception as e:
             print(f"Crew error: {e}")
             answer = "I'm thinking... give me a moment."
-    
+
     try:
         client = get_convex_client()
         user = client.get_user_by_contact_id(request.contact_id)
@@ -102,18 +117,23 @@ async def chat(request: ManyChatRequest):
             )
     except Exception as e:
         print(f"Convex store error: {e}")
-    
+
     try:
         send_manychat_message(request.contact_id, answer)
     except Exception as e:
         print(f"ManyChat send error: {e}")
-    
+
     return ManyChatResponse(
         messages=[{"text": answer}],
-        _timestamp=int(__import__("time").time() * 1000),
+        _timestamp=int(time.time() * 1000),
     )
 
 
 @app.get("/health")
 async def health():
     return {"status": "ok", "app": "crewai-manychat"}
+
+
+@app.get("/")
+async def root():
+    return {"message": "Hello World"}

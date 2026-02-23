@@ -62,10 +62,10 @@ class RAGSearchTool(BaseTool):
     args_schema: Type[BaseModel] = RAGSearchInput
     
     def _run(self, query: str) -> str:
-        from .convex_client import convex_client
+        from .convex_client import get_convex_client
         
         try:
-            results = convex_client.search_knowledge_base(query, limit=5)
+            results = get_convex_client().search_knowledge_base(query, limit=5)
             if not results:
                 return "No relevant information found in knowledge base."
             
@@ -93,14 +93,15 @@ class MemorySearchTool(BaseTool):
     args_schema: Type[BaseModel] = MemorySearchInput
     
     def _run(self, contact_id: str) -> str:
-        from .convex_client import convex_client
+        from .convex_client import get_convex_client
         
         try:
-            user = convex_client.get_user_by_contact_id(contact_id)
+            client = get_convex_client()
+            user = client.get_user_by_contact_id(contact_id)
             if not user:
                 return "No user found."
             
-            messages = convex_client.get_chat_history(user["_id"], limit=10)
+            messages = client.get_chat_history(user["_id"], limit=10)
             if not messages:
                 return "No previous conversation history found."
             

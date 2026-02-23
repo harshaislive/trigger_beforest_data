@@ -1,5 +1,5 @@
 import os
-from typing import Optional, List, Dict, Any
+from typing import Optional
 from langchain_openai import ChatOpenAI
 
 
@@ -13,13 +13,16 @@ class MiniMaxLLM(ChatOpenAI):
         minimax_api_url: str = "https://api.minimax.io/anthropic",
         **kwargs
     ):
-        self.minimax_api_key = minimax_api_key or os.getenv("MINIMAX_API_KEY")
-        self.minimax_api_url = minimax_api_url
-        
+        api_key = minimax_api_key or os.getenv("MINIMAX_API_KEY")
+        api_url = os.getenv("MINIMAX_API_URL", minimax_api_url)
+
+        if not api_key:
+            raise ValueError("MINIMAX_API_KEY is required")
+
         super().__init__(
             model=model,
-            openai_api_key=self.minimax_api_key,
-            openai_api_base=f"{self.minimax_api_url}/v1",
+            openai_api_key=api_key,
+            openai_api_base=f"{api_url.rstrip('/')}/v1",
             **kwargs
         )
 
