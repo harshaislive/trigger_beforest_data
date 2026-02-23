@@ -36,10 +36,11 @@ export async function callLLM(
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-model: 'MiniMax-M2.5',
-      max_tokens: 1024,
+      model: 'MiniMax-M2.5',
+      max_tokens: 512, // Reduced for faster response
       messages: allMessages,
     }),
+    signal: AbortSignal.timeout(8000), // 8 second timeout (leaves 2s buffer)
   })
 
   console.log('Minimax response status:', response.status)

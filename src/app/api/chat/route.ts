@@ -127,15 +127,21 @@ export async function POST(request: NextRequest) {
     // 7. Build context for LLM
     const context = buildContext(history, knowledge)
 
-    // 8. Generate answer using LLM
-    const answer = await generateAnswer(
-      message,
-      context,
-      history.map((msg: { message: string }) => ({
-        role: 'user' as const,
-        content: msg.message,
-      }))
-    )
+    // 8. Generate answer using LLM (with timeout handling)
+    let answer: string
+    try {
+      answer = await generateAnswer(
+        message,
+        context,
+        history.map((msg: { message: string }) => ({
+          role: 'user' as const,
+          content: msg.message,
+        }))
+      )
+    } catch (error) {
+      console.error('LLM error:', error)
+      answer = "I'm taking a moment to think about that. Could you try again?"
+    }
 
     // 9. Extract sources
     const sources = knowledge.map((item: { url: string }) => item.url)
