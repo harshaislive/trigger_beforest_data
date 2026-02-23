@@ -90,22 +90,46 @@ export const storeChatMessage = mutation({
 export const searchKnowledgeBase = query({
   args: { query: v.string(), limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    const allItems = await ctx.db.query('knowledgeItems').take(args.limit ?? 50)
+    const allItems = await ctx.db.query('knowledgeItems').take(100)
     
     if (!args.query) return allItems.slice(0, args.limit ?? 5)
     
     const queryLower = args.query.toLowerCase()
-    const words = queryLower.split(' ').filter(w => w.length > 2)
+    const queryWords = queryLower.split(/\s+/).filter(w => w.length > 1)
     
-    return allItems.filter(item => {
+    // Score each item
+    const scored = allItems.map(item => {
       const contentLower = item.content.toLowerCase()
       const titleLower = (item.title || '').toLowerCase()
+      const urlLower = (item.url || '').toLowerCase()
       
-      // Match any word from query
-      return words.some(word => 
-        contentLower.includes(word) || titleLower.includes(word)
-      )
-    }).slice(0, args.limit ?? 5)
+      let score = 0
+      
+      // Title match - highest weight
+      for (const word of queryWords) {
+        if (titleLower.includes(word)) score += 10
+      }
+      
+      // URL match - high weight  
+      for (const word of queryWords) {
+        if (urlLower.includes(word)) score += 5
+      }
+      
+      // Content match - lower weight
+      for (const word of queryWords) {
+        const matches = (contentLower.match(new RegExp(word, 'g')) || []).length
+        score += matches
+      }
+      
+      return { item, score }
+    })
+    
+    // Sort by score and return top results
+    return scored
+      .filter(s => s.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, args.limit ?? 5)
+      .map(s => s.item)
   },
 })
 

@@ -8,6 +8,7 @@ const convex = new ConvexHttpClient(CONVEX_URL)
 
 const MANYCHAT_API_KEY = process.env.MANYCHAT_API_KEY
 const MANYCHAT_API_URL = 'https://api.manychat.com/fb/sending/sendContent'
+const BRAVE_API_KEY = process.env.BRAVE_API_KEY
 
 const GREETINGS = ['hi', 'hello', 'hey', 'hiya', 'good morning', 'good evening', 'good afternoon', 'what\'s up', 'wassup', 'yo']
 
@@ -60,6 +61,31 @@ async function sendManyChatMessage(subscriberId: string, message: string) {
   }
 }
 
+async function searchBrave(query: string): Promise<string> {
+  if (!BRAVE_API_KEY) {
+    console.error('BRAVE_API_KEY not configured')
+    return ''
+  }
+
+  try {
+    const response = await fetch(`https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5`, {
+      headers: {
+        'X-Subscription-Token': BRAVE_API_KEY,
+      },
+    })
+
+    const data = await response.json()
+    const results = data.web?.results || []
+    
+    return results.map((r: { title: string; description: string }) => 
+      `${r.title}: ${r.description}`
+    ).join('\n\n')
+  } catch (error) {
+    console.error('Brave search error:', error)
+    return ''
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -79,10 +105,45 @@ export async function POST(request: NextRequest) {
     // Check for greeting
     const isGreet = isGreeting(message)
     let answer: string
+    let convexUserId = ''
     
     if (isGreet) {
       answer = `Hey. I'm Forest Guide at Beforest. What would you like to know?`
     } else {
+      // Get chat history for context
+      let chatHistory: { role: string; content: string }[] = []
+      
+      const existingUserId = telegramUserId || instagramUserId || finalContactId
+      
+      if (existingUserId) {
+        try {
+          // @ts-ignore
+          convexUserId = await convex.mutation('chat:getOrCreateUser', {
+            telegramUserId: telegramUserId || undefined,
+            instagramUserId: instagramUserId || undefined,
+            contactId: finalContactId || undefined,
+            name,
+          })
+          
+          // @ts-ignore
+          const history = await convex.query('chat:getChatHistory', { userId: convexUserId, limit: 6 })
+          if (history && history.length > 0) {
+            chatHistory = history.map((h: { message: string; response?: string }) => ({
+              role: 'user',
+              content: h.message,
+            }))
+            // Add assistant responses
+            history.forEach((h: { message: string; response?: string }) => {
+              if (h.response) {
+                chatHistory.push({ role: 'assistant', content: h.response })
+              }
+            })
+          }
+        } catch (error) {
+          console.error('History error:', error)
+        }
+      }
+
       // Search knowledge base
       let context = ''
       try {
@@ -92,36 +153,32 @@ export async function POST(request: NextRequest) {
         if (knowledgeItems && knowledgeItems.length > 0) {
           context = knowledgeItems.map((item: { content: string }) => item.content).join('\n\n')
           console.log('Context length:', context.length)
-        } else {
-          console.log('No knowledge items found for query:', message)
         }
       } catch (error) {
         console.error('Knowledge base error:', error)
       }
 
+      // Fallback to Brave Search if no context
+      if (!context && BRAVE_API_KEY) {
+        console.log('Using Brave Search as fallback...')
+        const braveResults = await searchBrave(`${message} Beforest`)
+        if (braveResults) {
+          context = `Web search results:\n${braveResults}`
+        }
+      }
+
       // Generate answer using LLM
       try {
-        answer = await generateAnswer(message, context, [])
+        answer = await generateAnswer(message, context, chatHistory)
       } catch (error) {
         console.error('LLM error:', error)
         answer = "I'm not sure about that. What else would you like to know?"
       }
     }
 
-    // Store message in Convex (blocking for now)
-    const existingUserId = telegramUserId || instagramUserId || finalContactId
-    if (existingUserId) {
-      console.log('Storing to Convex:', { telegramUserId, instagramUserId, finalContactId, name })
+    // Store message in Convex
+    if (convexUserId) {
       try {
-        // @ts-ignore
-        const convexUserId = await convex.mutation('chat:getOrCreateUser', {
-          telegramUserId: telegramUserId || undefined,
-          instagramUserId: instagramUserId || undefined,
-          contactId: finalContactId || undefined,
-          name,
-        })
-        console.log('Got convex user ID:', convexUserId)
-        
         // @ts-ignore
         await convex.mutation('chat:storeChatMessage', {
           userId: convexUserId,
