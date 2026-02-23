@@ -28,6 +28,21 @@ GREETINGS = [
     "yo",
 ]
 
+CANONICAL_BRANDS = [
+    "beforest.co",
+    "bewild.life",
+    "hospitality.beforest.co",
+    "experiences.beforest.co",
+    "10percent.beforest.co",
+]
+
+DOMAIN_ALIASES = {
+    "beforest.in": "beforest.co",
+    "www.beforest.in": "beforest.co",
+    "www.beforest.co": "beforest.co",
+    "www.bewild.life": "bewild.life",
+}
+
 
 class ManyChatRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
@@ -123,6 +138,23 @@ def split_message_chunks(text: str, max_chars: int = 240) -> list[str]:
         chunks.append(current)
 
     return chunks or [cleaned]
+
+
+def enforce_canonical_brand_domains(text: str) -> str:
+    normalized = text
+    for wrong, correct in DOMAIN_ALIASES.items():
+        normalized = re.sub(rf"\b{re.escape(wrong)}\b", correct, normalized, flags=re.IGNORECASE)
+
+    def replace_beforest_domain(match: re.Match[str]) -> str:
+        domain = match.group(0).lower()
+        if domain in CANONICAL_BRANDS:
+            return domain
+        if domain.startswith("beforest."):
+            return "beforest.co"
+        return domain
+
+    normalized = re.sub(r"\bbeforest\.[a-z]{2,}\b", replace_beforest_domain, normalized, flags=re.IGNORECASE)
+    return normalized
 
 
 def infer_lead_signals(message: str) -> dict:
@@ -272,6 +304,7 @@ async def chat(request: ManyChatRequest):
             answer = "I'm thinking... give me a moment."
 
     answer = answer.replace("\u2014", "-").replace("\u2013", "-")
+    answer = enforce_canonical_brand_domains(answer)
 
     try:
         if user_id:
