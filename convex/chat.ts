@@ -1,6 +1,55 @@
 import { query, mutation } from './_generated/server'
 import { v } from 'convex/values'
 
+const STOP_WORDS = new Set([
+  'a',
+  'an',
+  'and',
+  'are',
+  'as',
+  'at',
+  'be',
+  'by',
+  'for',
+  'from',
+  'how',
+  'in',
+  'is',
+  'it',
+  'of',
+  'on',
+  'or',
+  'that',
+  'the',
+  'this',
+  'to',
+  'was',
+  'what',
+  'when',
+  'where',
+  'who',
+  'why',
+  'with',
+])
+
+function tokenize(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length > 1 && !STOP_WORDS.has(w))
+}
+
+function bm25Score(tf: number, df: number, docLength: number, avgDocLength: number, totalDocs: number): number {
+  if (tf <= 0 || df <= 0 || docLength <= 0 || totalDocs <= 0) return 0
+
+  const k1 = 1.2
+  const b = 0.75
+  const idf = Math.log(1 + (totalDocs - df + 0.5) / (df + 0.5))
+  const norm = k1 * (1 - b + b * (docLength / Math.max(avgDocLength, 1)))
+  return idf * ((tf * (k1 + 1)) / (tf + norm))
+}
+
 export const getOrCreateUser = mutation({
   args: { 
     telegramUserId: v.optional(v.string()), 
@@ -91,40 +140,77 @@ export const searchKnowledgeBase = query({
   args: { query: v.string(), limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
     const allItems = await ctx.db.query('knowledgeItems').take(100)
-    
+
     if (!args.query) return allItems.slice(0, args.limit ?? 5)
-    
-    const queryLower = args.query.toLowerCase()
-    const queryWords = queryLower.split(/\s+/).filter(w => w.length > 1)
-    
-    const scored = allItems.map(item => {
-      const contentLower = item.content.toLowerCase()
-      const titleLower = (item.title || '').toLowerCase()
-      const urlLower = (item.url || '').toLowerCase()
-      
-      let score = 0
-      
-      for (const word of queryWords) {
-        if (titleLower.includes(word)) score += 10
+
+    const queryTerms = tokenize(args.query)
+    if (!queryTerms.length) return allItems.slice(0, args.limit ?? 5)
+
+    const docs = allItems.map((item) => {
+      const title = item.title || ''
+      const url = item.url || ''
+      const content = item.content || ''
+      const combined = `${title} ${url} ${content}`
+      const tokens = tokenize(combined)
+      const tf = new Map<string, number>()
+
+      for (const token of tokens) {
+        tf.set(token, (tf.get(token) || 0) + 1)
       }
-      
-      for (const word of queryWords) {
-        if (urlLower.includes(word)) score += 5
+
+      return {
+        item,
+        titleLower: title.toLowerCase(),
+        urlLower: url.toLowerCase(),
+        contentLower: content.toLowerCase(),
+        tf,
+        docLength: tokens.length,
       }
-      
-      for (const word of queryWords) {
-        const matches = (contentLower.match(new RegExp(word, 'g')) || []).length
-        score += matches
-      }
-      
-      return { item, score }
     })
-    
+
+    const totalDocs = docs.length
+    const avgDocLength =
+      docs.reduce((sum, d) => sum + d.docLength, 0) / Math.max(totalDocs, 1)
+
+    const docFreq = new Map<string, number>()
+    for (const term of queryTerms) {
+      let count = 0
+      for (const doc of docs) {
+        if ((doc.tf.get(term) || 0) > 0) count += 1
+      }
+      docFreq.set(term, count)
+    }
+
+    const scored = docs.map((doc) => {
+      let score = 0
+
+      for (const term of queryTerms) {
+        score += bm25Score(
+          doc.tf.get(term) || 0,
+          docFreq.get(term) || 0,
+          doc.docLength,
+          avgDocLength,
+          totalDocs,
+        )
+      }
+
+      for (const term of queryTerms) {
+        if (doc.titleLower.includes(term)) score += 2.5
+        if (doc.urlLower.includes(term)) score += 1.25
+      }
+
+      if (doc.contentLower.includes(args.query.toLowerCase())) {
+        score += 3
+      }
+
+      return { item: doc.item, score }
+    })
+
     return scored
-      .filter(s => s.score > 0)
+      .filter((s) => s.score > 0)
       .sort((a, b) => b.score - a.score)
       .slice(0, args.limit ?? 5)
-      .map(s => s.item)
+      .map((s) => s.item)
   },
 })
 
