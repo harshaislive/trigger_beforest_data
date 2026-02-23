@@ -76,15 +76,15 @@ export async function generateAnswer(
   context: string,
   chatHistory: { role: string; content: string }[]
 ): Promise<string> {
-  const systemPrompt = `You are a helpful AI assistant. Use the following context to answer the user's question.
-
-Context from knowledge base:
-${context}
-
+  const contextSection = context ? `Context from knowledge base:\n${context}\n` : ''
+  
+  const systemPrompt = `You are TriggerDev - an AI assistant that helps users. ${contextSection}
 Instructions:
-- Answer based on the context provided
-- If you don't know the answer, say so honestly
-- Keep your answer concise and helpful`
+- Answer based on the context provided if available
+- If no context is available, answer based on your general knowledge
+- If you truly don't know something, say so honestly
+- Be helpful, concise and direct
+- Don't start every response with "Hi" or greetings`
 
   const messages: LLMMessage[] = [
     ...chatHistory.map(msg => ({
