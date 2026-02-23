@@ -1,7 +1,6 @@
 import os
 from typing import List, Dict, Any, Optional
-
-from convex import ConvexClient as ConvexHttpClient
+import requests
 
 
 class ConvexClient:
@@ -11,17 +10,36 @@ class ConvexClient:
         self.convex_url = (convex_url or os.getenv("CONVEX_URL") or "").rstrip("/")
         if not self.convex_url:
             raise ValueError("CONVEX_URL is required")
-        self.client = ConvexHttpClient(self.convex_url)
 
     @staticmethod
     def _clean_args(args: Dict[str, Any]) -> Dict[str, Any]:
         return {k: v for k, v in args.items() if v is not None}
 
     def _query(self, function_name: str, args: Dict[str, Any]) -> Any:
-        return self.client.query(function_name, self._clean_args(args))
+        return self._request("query", function_name, args)
 
     def _mutation(self, function_name: str, args: Dict[str, Any]) -> Any:
-        return self.client.mutation(function_name, self._clean_args(args))
+        return self._request("mutation", function_name, args)
+
+    def _request(self, endpoint: str, function_name: str, args: Dict[str, Any]) -> Any:
+        response = requests.post(
+            f"{self.convex_url}/api/{endpoint}",
+            json={
+                "path": function_name,
+                "args": self._clean_args(args),
+            },
+            timeout=20,
+        )
+        response.raise_for_status()
+        payload = response.json()
+
+        if isinstance(payload, dict) and payload.get("status") == "error":
+            message = payload.get("errorMessage", "Unknown Convex error")
+            raise RuntimeError(f"Convex {endpoint} {function_name} failed: {message}")
+
+        if isinstance(payload, dict) and "value" in payload:
+            return payload["value"]
+        return payload
     
     def get_or_create_user(
         self,
@@ -66,6 +84,38 @@ class ConvexClient:
         result = self._query("chat:searchKnowledgeBase", {
             "query": query,
             "limit": limit,
+        })
+        return result
+
+    def upsert_knowledge_item(
+        self,
+        url: str,
+        content: str,
+        title: Optional[str] = None,
+        summary: Optional[str] = None,
+    ) -> str:
+        """Insert or update a knowledge item by URL."""
+        result = self._mutation("chat:upsertKnowledgeItem", {
+            "url": url,
+            "title": title,
+            "content": content,
+            "summary": summary,
+        })
+        return result
+
+    def add_knowledge_item(
+        self,
+        url: str,
+        content: str,
+        title: Optional[str] = None,
+        summary: Optional[str] = None,
+    ) -> str:
+        """Insert a knowledge item."""
+        result = self._mutation("chat:addKnowledgeItem", {
+            "url": url,
+            "title": title,
+            "content": content,
+            "summary": summary,
         })
         return result
     

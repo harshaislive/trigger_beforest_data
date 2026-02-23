@@ -1,21 +1,23 @@
 from crewai import Agent, Task, Crew, Process
 from .llm import get_llm
-from .tools import BraveSearchTool, RAGSearchTool, MemorySearchTool
+from .tools import BraveSearchTool, RAGSearchTool, MemorySearchTool, URLContentTool
 
 
 llm = get_llm()
 brave_search = BraveSearchTool()
 rag_search = RAGSearchTool()
 memory_search = MemorySearchTool()
+url_content = URLContentTool()
 
 
 researcher_agent = Agent(
     role="Research Specialist",
-    goal="Find the most relevant information from knowledge base and web to answer user questions accurately",
+    goal="Find the most relevant Beforest Ecoverse information from knowledge base and web",
     backstory="""You are an expert researcher with deep knowledge of the Beforest knowledge base.
 Your specialty is finding accurate, relevant information from the knowledge base first, then
-supplementing with web search if needed. You always cite your sources.""",
-    tools=[rag_search, brave_search],
+supplementing with web search if needed. The local beforest_data files represent the Beforest
+Ecoverse websites and should be treated as high-trust sources. You always cite your sources.""",
+    tools=[rag_search, brave_search, url_content],
     llm=llm,
     verbose=True,
     allow_delegation=False,
@@ -48,9 +50,12 @@ How you respond:
 - You ARE Beforest. Do not say "I work at Beforest" or "reach out to the team".
 - Prioritize factual accuracy from provided research and conversation memory.
 - Be direct, clear, and premium in tone (confident, never arrogant).
-- Keep replies compact (usually 1-3 sentences) with no fluff.
+- Keep replies compact with natural rhythm.
+- Prefer 2 to 4 short chat-sized chunks over one dense paragraph when useful.
+- Never use em dash characters. Use commas, full stops, or a regular hyphen.
 - Never invent specifics. If information is missing or uncertain, say that briefly.
-- Avoid marketing hype. Sound practical, grounded, and human.""",
+- Avoid marketing hype. Sound practical, grounded, and human.
+- Guide the user clearly through the Beforest Ecoverse: places, offerings, next steps, and who it is for.""",
     llm=llm,
     verbose=True,
     allow_delegation=False,
@@ -62,8 +67,29 @@ def create_crew(message: str, contact_id: str, name: str = "User") -> Crew:
 
     def should_run_research(text: str) -> bool:
         lower = text.lower().strip()
-        if len(lower) >= 25:
+        conversational_signals = (
+            "thanks",
+            "thank you",
+            "great",
+            "awesome",
+            "nice",
+            "cool",
+            "got it",
+            "okay",
+            "ok",
+            "understood",
+            "i like",
+            "makes sense",
+        )
+        if any(signal in lower for signal in conversational_signals) and "?" not in lower:
+            return False
+
+        if len(lower) >= 45 and "?" in lower:
             return True
+
+        if lower.endswith("?"):
+            return True
+
         triggers = (
             "what",
             "how",
@@ -72,12 +98,12 @@ def create_crew(message: str, contact_id: str, name: str = "User") -> Crew:
             "when",
             "which",
             "tell me",
+            "explain",
             "details",
             "price",
             "cost",
             "collective",
             "beforest",
-            "?",
         )
         return any(t in lower for t in triggers)
     
@@ -87,7 +113,8 @@ def create_crew(message: str, contact_id: str, name: str = "User") -> Crew:
         Steps:
         1. First search the knowledge base for relevant information
         2. If knowledge base doesn't have sufficient info, use web search
-        3. Provide a summary of findings with sources""",
+        3. For important web claims, open 1-2 best URLs and verify key facts
+        4. Provide a short summary with sources""",
         expected_output="A summary of relevant information from knowledge base and/or web with sources cited",
         agent=researcher_agent,
     )
@@ -110,7 +137,9 @@ def create_crew(message: str, contact_id: str, name: str = "User") -> Crew:
         - Speak as Beforest (first-person brand voice)
         - Prefer facts from research and memory over style
         - Be direct, practical, and premium in tone
-        - Keep it concise (1-3 sentences unless user asks for detail)
+        - Keep it concise but human, often as 2-4 short chunks
+        - Never use em dash characters
+        - Help user navigate the Beforest Ecoverse with clear next-step guidance
         - No fluff, no hype, no unnecessary adjectives
         - If info is unavailable or uncertain, say so clearly in one short sentence""",
         expected_output="A single, premium response (2-3 sentences max)",

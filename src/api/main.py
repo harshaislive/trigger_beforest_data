@@ -1,5 +1,6 @@
 import os
 import time
+import re
 from typing import Optional
 
 import requests
@@ -64,13 +65,58 @@ def send_manychat_message(subscriber_id: str, message: str) -> dict:
                 "version": "v2",
                 "content": {
                     "type": "instagram",
-                    "messages": [{"type": "text", "text": message}],
+                    "messages": [
+                        {"type": "text", "text": chunk}
+                        for chunk in split_message_chunks(message)
+                    ],
                 },
             },
         },
+        timeout=20,
     )
     response.raise_for_status()
     return response.json()
+
+
+def split_message_chunks(text: str, max_chars: int = 240) -> list[str]:
+    cleaned = text.replace("\u2014", "-").replace("\u2013", "-").strip()
+    if not cleaned:
+        return [""]
+
+    parts = [p.strip() for p in re.split(r"(?<=[.!?])\s+", cleaned) if p.strip()]
+    chunks: list[str] = []
+    current = ""
+
+    for part in parts:
+        candidate = part if not current else f"{current} {part}"
+        if len(candidate) <= max_chars:
+            current = candidate
+            continue
+
+        if current:
+            chunks.append(current)
+            current = ""
+
+        if len(part) <= max_chars:
+            current = part
+            continue
+
+        words = part.split()
+        segment = ""
+        for word in words:
+            candidate_word = word if not segment else f"{segment} {word}"
+            if len(candidate_word) <= max_chars:
+                segment = candidate_word
+            else:
+                chunks.append(segment)
+                segment = word
+        if segment:
+            current = segment
+
+    if current:
+        chunks.append(current)
+
+    return chunks or [cleaned]
 
 
 @app.post("/api/chat", response_model=ManyChatResponse)
@@ -108,6 +154,8 @@ async def chat(request: ManyChatRequest):
             print(f"Crew error: {e}")
             answer = "I'm thinking... give me a moment."
 
+    answer = answer.replace("\u2014", "-").replace("\u2013", "-")
+
     try:
         if user_id:
             get_convex_client().store_chat_message(
@@ -124,7 +172,7 @@ async def chat(request: ManyChatRequest):
         print(f"ManyChat send error: {e}")
 
     return ManyChatResponse(
-        messages=[{"text": answer}],
+        messages=[{"text": chunk} for chunk in split_message_chunks(answer)],
         _timestamp=int(time.time() * 1000),
     )
 

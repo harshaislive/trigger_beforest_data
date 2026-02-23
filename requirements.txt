@@ -8,6 +8,4 @@ pydantic>=2.0.0
 email-validator>=2.2.0
 python-dotenv>=1.0.0
 requests>=2.31.0
-convex>=0.7.0
-litellm>=1.51.0
-apscheduler>=3.10.4
+litellm[proxy]>=1.51.0

@@ -1,4 +1,4 @@
-.PHONY: install dev run convex
+.PHONY: install dev run convex sync-kb
 
 install:
 	uv sync
@@ -11,3 +11,6 @@ run:
 
 convex:
 	npx convex dev
+
+sync-kb:
+	uv run python scripts/sync_beforest_data_to_convex.py

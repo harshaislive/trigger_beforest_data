@@ -229,6 +229,36 @@ export const addKnowledgeItem = mutation({
   },
 })
 
+export const upsertKnowledgeItem = mutation({
+  args: {
+    url: v.string(),
+    title: v.optional(v.string()),
+    content: v.string(),
+    summary: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query('knowledgeItems')
+      .filter((q) => q.eq(q.field('url'), args.url))
+      .first()
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        title: args.title,
+        content: args.content,
+        summary: args.summary,
+        createdAt: Date.now(),
+      })
+      return existing._id
+    }
+
+    return await ctx.db.insert('knowledgeItems', {
+      ...args,
+      createdAt: Date.now(),
+    })
+  },
+})
+
 export const getRecentKnowledgeItems = query({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
