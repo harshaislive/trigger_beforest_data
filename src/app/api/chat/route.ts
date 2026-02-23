@@ -89,12 +89,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Send via ManyChat API using contactId as subscriber_id
+    // Send via ManyChat API using contactId as subscriber_id (non-blocking)
     if (contactId && MANYCHAT_API_KEY) {
-      await sendManyChatMessage(contactId, answer)
+      sendManyChatMessage(contactId, answer).catch(console.error)
     }
 
-    // Return response to ManyChat (add timestamp to prevent caching)
+    // Return response to ManyChat immediately (non-blocking)
     const response = NextResponse.json({
       version: 'v2',
       messages: [{ text: answer }],

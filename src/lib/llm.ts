@@ -37,10 +37,10 @@ export async function callLLM(
     },
     body: JSON.stringify({
       model: 'MiniMax-M2.5',
-      max_tokens: 512, // Reduced for faster response
+      max_tokens: 256, // Reduced for faster response
       messages: allMessages,
     }),
-    signal: AbortSignal.timeout(8000), // 8 second timeout (leaves 2s buffer)
+    signal: AbortSignal.timeout(6000), // 6 second timeout
   })
 
   console.log('Minimax response status:', response.status)
