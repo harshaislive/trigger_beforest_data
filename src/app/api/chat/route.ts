@@ -30,13 +30,29 @@ function isGreeting(message: string): boolean {
   return GREETINGS.some(g => lower === g || lower.startsWith(g + ' ') || lower.endsWith(' ' + g))
 }
 
-async function sendManyChatMessage(subscriberId: string, message: string) {
+async function sendManyChatMessage(subscriberId: string, message: string, buttons?: { caption: string; payload: string }[]) {
   if (!MANYCHAT_API_KEY) {
     console.error('MANYCHAT_API_KEY not configured')
     return
   }
 
   try {
+    // Build message payload with optional buttons
+    const messageContent: any = {
+      messages: [
+        { type: 'text', text: message },
+      ],
+    }
+
+    // Add quick replies if buttons provided
+    if (buttons && buttons.length > 0) {
+      messageContent.quick_replies = buttons.map(btn => ({
+        type: 'node',
+        caption: btn.caption,
+        target: btn.payload
+      }))
+    }
+
     const response = await fetch(MANYCHAT_API_URL, {
       method: 'POST',
       headers: {
@@ -47,12 +63,7 @@ async function sendManyChatMessage(subscriberId: string, message: string) {
         subscriber_id: parseInt(subscriberId),
         data: {
           version: 'v2',
-          content: {
-            type: 'instagram',
-            messages: [
-              { type: 'text', text: message },
-            ],
-          },
+          content: messageContent,
         },
       }),
     })
@@ -185,8 +196,11 @@ export async function POST(request: NextRequest) {
       }
 
       // Generate answer
+      let buttons: { caption: string; payload: string }[] | undefined
       try {
-        answer = await generateAnswer(message, context, [])
+        const result = await generateAnswer(message, context, [])
+        answer = result.text
+        buttons = result.buttons
       } catch (error) {
         answer = "I'm not sure about that."
       }
@@ -210,15 +224,26 @@ export async function POST(request: NextRequest) {
 
     // Send via ManyChat API (non-blocking)
     if (finalContactId && MANYCHAT_API_KEY) {
-      sendManyChatMessage(finalContactId, answer).catch(console.error)
+      sendManyChatMessage(finalContactId, answer, buttons).catch(console.error)
     }
 
     // Return response to ManyChat
-    return NextResponse.json({
+    const response: any = {
       version: 'v2',
       messages: [{ text: answer }],
       _timestamp: Date.now(),
-    })
+    }
+
+    // Add quick replies if buttons provided
+    if (buttons && buttons.length > 0) {
+      response.quick_replies = buttons.map(btn => ({
+        type: 'node',
+        caption: btn.caption,
+        target: btn.payload
+      }))
+    }
+
+    return NextResponse.json(response)
   } catch (error) {
     console.error('Chat API error:', error)
     return NextResponse.json(

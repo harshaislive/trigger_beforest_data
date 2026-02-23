@@ -8,6 +8,7 @@ export interface LLMMessage {
 
 export interface LLMResponse {
   content: string
+  buttons?: { caption: string; payload: string }[]
   usage?: {
     input_tokens: number
     output_tokens: number
@@ -76,7 +77,7 @@ export async function generateAnswer(
   userMessage: string,
   context: string,
   chatHistory: { role: string; content: string }[]
-): Promise<string> {
+): Promise<{ text: string; buttons?: { caption: string; payload: string }[] }> {
   const contextSection = context ? `Use information BELOW to answer. If nothing relevant, say you don't know:\n\n${context}\n\n` : ''
   
   const systemPrompt = `You are a team member at Beforest. You live and breathe this work.
@@ -89,7 +90,23 @@ How you respond:
 - If you truly don't know, say "I don't have that detail right now."
 - Keep it brief. One or two sentences max.
 - No emojis unless the conversation calls for it.
-- Never sound like marketing. ${contextSection}`
+- Never sound like marketing. ${contextSection}
+
+BUTTONS FORMAT (IMPORTANT):
+When appropriate, you can suggest buttons for the user to click. Format buttons as:
+[BUTTONS]
+- caption: "Coffee Options", payload: "coffee_options"
+- caption: "Rice Varieties", payload: "rice"
+- caption: "Experiences", payload: "experiences"
+
+Only include buttons when the user asks about:
+- Products or pricing (coffee, rice, spices, etc.)
+- Experiences or bookings
+- More options or details
+- Different categories to explore
+
+The payload should be a simple lowercase_underscore identifier.
+Do NOT include buttons for casual conversation or greetings.`
 
 
 
@@ -103,5 +120,23 @@ How you respond:
   ]
 
   const result = await callLLM(messages, systemPrompt)
-  return result.content
+  
+  // Parse buttons from response
+  const buttons: { caption: string; payload: string }[] = []
+  if (result.content.includes('[BUTTONS]')) {
+    const buttonSection = result.content.split('[BUTTONS]')[1]
+    const buttonLines = buttonSection.split('\n').filter(line => line.includes('caption:'))
+    for (const line of buttonLines) {
+      const captionMatch = line.match(/caption:\s*"([^"]+)"/)
+      const payloadMatch = line.match(/payload:\s*"([^"]+)"/)
+      if (captionMatch && payloadMatch) {
+        buttons.push({ caption: captionMatch[1], payload: payloadMatch[1] })
+      }
+    }
+  }
+  
+  return {
+    text: result.content.replace(/\[BUTTONS\][\s\S]*/g, '').trim(),
+    buttons: buttons.length > 0 ? buttons : undefined
+  }
 }
