@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  crewai:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - MINIMAX_API_KEY=${MINIMAX_API_KEY}
+      - MINIMAX_API_URL=${MINIMAX_API_URL}
+      - CONVEX_URL=${CONVEX_URL}
+      - BRAVE_API_KEY=${BRAVE_API_KEY}
+      - MANYCHAT_API_KEY=${MANYCHAT_API_KEY}
+    restart: unless-stopped

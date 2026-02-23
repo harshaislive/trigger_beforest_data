@@ -1,0 +1,25 @@
+{
+  "name": "crewai-manychat",
+  "description": "ManyChat integration with CrewAI using MiniMax LLM",
+  "repository": "https://github.com/harshaislive/crew_ai",
+  "build_pack": "dockerfile",
+  "dockerfile": "Dockerfile",
+  "environment": {
+    "MINIMAX_API_KEY": "",
+    "MINIMAX_API_URL": "https://api.minimax.io/anthropic",
+    "CONVEX_URL": "",
+    "BRAVE_API_KEY": "",
+    "MANYCHAT_API_KEY": ""
+  },
+  "ports": [
+    {
+      "container": 3000,
+      "public": 3000
+    }
+  ],
+  "health_check": {
+    "path": "/health",
+    "port": 3000,
+    "type": "http"
+  }
+}
