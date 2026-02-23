@@ -15,6 +15,7 @@ const ChatRequestSchema = z.object({
   telegramUserId: z.string().optional(),
   instagramUserId: z.string().optional(),
   name: z.string().optional(),
+  contactId: z.string().optional(),
 })
 
 function isGreeting(message: string): boolean {
@@ -59,64 +60,40 @@ async function sendManyChatMessage(subscriberId: string, message: string) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { message, telegramUserId, instagramUserId, name } = ChatRequestSchema.parse(body)
+    const { message, telegramUserId, instagramUserId, name, contactId } = ChatRequestSchema.parse(body)
 
     const userId = telegramUserId || instagramUserId
-    if (!userId) {
+    if (!userId && !contactId) {
       return NextResponse.json(
-        { error: 'Either telegramUserId or instagramUserId is required' },
+        { error: 'Either telegramUserId, instagramUserId, or contactId is required' },
         { status: 400 }
       )
     }
 
-    // 1. Get or create user in Convex
-    // @ts-ignore
-    const convexUserId = await convex.mutation('chat:getOrCreateUser', { 
-      telegramUserId: telegramUserId || undefined, 
-      instagramUserId: instagramUserId || undefined,
-      name 
-    })
+    // Skip Convex for now - direct LLM call
 
-    // 2. Check for greeting - skip slow Convex query for now
+    // Check for greeting
     const isGreet = isGreeting(message)
-    if (isGreet) {
-      const greetingResponse = `[TriggerDev Bot] Hey there! 👋 I'm TriggerDev, your AI assistant. What would you like to know?`
-      
-      const greetingRes = NextResponse.json({
-        version: 'v2',
-        messages: [{ text: greetingResponse }],
-        _timestamp: Date.now(),
-      })
-      greetingRes.headers.set('Cache-Control', 'no-store, must-revalidate')
-      return greetingRes
-    }
-
-    // Skip Convex queries for now - just call LLM directly
-
-    // 8. Generate answer using LLM (with timeout handling)
     let answer: string
-    try {
-      answer = await generateAnswer(message, '', [])
-    } catch (error) {
-      console.error('LLM error:', error)
-      answer = "I'm processing your request. Could you try again?"
+    
+    if (isGreet) {
+      answer = `[TriggerDev Bot] Hey there! 👋 I'm TriggerDev, your AI assistant. What would you like to know?`
+    } else {
+      // Generate answer using LLM
+      try {
+        answer = await generateAnswer(message, '', [])
+      } catch (error) {
+        console.error('LLM error:', error)
+        answer = "I'm processing your request. Could you try again?"
+      }
     }
 
-    // Skip slow operations - store in background
-    // @ts-ignore
-    convex.mutation('chat:storeChatMessage', {
-      userId: convexUserId,
-      message,
-      response: answer,
-      sources: [],
-    }).catch(console.error)
-
-    // 11. Send via ManyChat API (for Instagram)
-    if (instagramUserId && MANYCHAT_API_KEY) {
-      await sendManyChatMessage(instagramUserId, answer)
+    // Send via ManyChat API using contactId as subscriber_id
+    if (contactId && MANYCHAT_API_KEY) {
+      await sendManyChatMessage(contactId, answer)
     }
 
-    // 12. Return response to ManyChat (add timestamp to prevent caching)
+    // Return response to ManyChat (add timestamp to prevent caching)
     const response = NextResponse.json({
       version: 'v2',
       messages: [{ text: answer }],
