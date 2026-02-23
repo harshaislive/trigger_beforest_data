@@ -77,21 +77,9 @@ export async function POST(request: NextRequest) {
       name 
     })
 
-    // 2. Get user conversation state
-    // @ts-ignore
-    const userState = await convex.query('chat:getUserState', { userId: convexUserId })
-    const conversationState = userState?.conversationState || 'idle'
-
-    console.log('User state:', conversationState, 'Message:', message)
-
-    // 3. Smart greeting detection - if in idle and just greeting, ask for actual question
-    if (conversationState === 'idle' && isGreeting(message)) {
-      // @ts-ignore
-      await convex.mutation('chat:updateUserState', { 
-        userId: convexUserId, 
-        conversationState: 'waiting_for_query' 
-      })
-
+    // 2. Check for greeting - skip slow Convex query for now
+    const isGreet = isGreeting(message)
+    if (isGreet) {
       const greetingResponse = `[TriggerDev Bot] Hey there! 👋 I'm TriggerDev, your AI assistant. What would you like to know?`
       
       const greetingRes = NextResponse.json({
@@ -103,58 +91,25 @@ export async function POST(request: NextRequest) {
       return greetingRes
     }
 
-    // 4. If waiting for query, process normally and reset state
-    if (conversationState === 'waiting_for_query') {
-      // @ts-ignore
-      await convex.mutation('chat:updateUserState', { 
-        userId: convexUserId, 
-        conversationState: 'idle' 
-      })
-    }
-
-    // 5. Get chat history for context
-    // @ts-ignore
-    const chatHistory = await convex.query('chat:getChatHistory', { userId: convexUserId, limit: 10 })
-    const history = Array.isArray(chatHistory) ? chatHistory : []
-
-    // 6. Search knowledge base
-    // @ts-ignore
-    const knowledgeItems = await convex.query('chat:searchKnowledgeBase', { query: message, limit: 5 })
-    const knowledge = Array.isArray(knowledgeItems) ? knowledgeItems : []
-
-    console.log('Knowledge items found:', knowledge.length)
-
-    // 7. Build context for LLM
-    const context = buildContext(history, knowledge)
+    // Skip Convex queries for now - just call LLM directly
 
     // 8. Generate answer using LLM (with timeout handling)
     let answer: string
     try {
-      answer = await generateAnswer(
-        message,
-        context,
-        history.map((msg: { message: string }) => ({
-          role: 'user' as const,
-          content: msg.message,
-        }))
-      )
+      answer = await generateAnswer(message, '', [])
     } catch (error) {
       console.error('LLM error:', error)
-      answer = "I'm taking a moment to think about that. Could you try again?"
+      answer = "I'm processing your request. Could you try again?"
     }
 
-    // 9. Extract sources
-    const sources = knowledge.map((item: { url: string }) => item.url)
-    console.log('Sources:', sources)
-
-    // 10. Store the message and response
+    // Skip slow operations - store in background
     // @ts-ignore
-    await convex.mutation('chat:storeChatMessage', {
+    convex.mutation('chat:storeChatMessage', {
       userId: convexUserId,
       message,
       response: answer,
-      sources,
-    })
+      sources: [],
+    }).catch(console.error)
 
     // 11. Send via ManyChat API (for Instagram)
     if (instagramUserId && MANYCHAT_API_KEY) {
@@ -176,20 +131,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
-}
-
-function buildContext(
-  chatHistory: { message: string; response?: string }[],
-  knowledgeItems: { content: string; url: string; title?: string }[]
-): string {
-  let context = ''
-
-  if (knowledgeItems.length > 0) {
-    context += 'Relevant knowledge:\n'
-    knowledgeItems.forEach((item) => {
-      context += `- ${item.title || item.url}: ${item.content.slice(0, 500)}\n`
-    })
-  }
-
-  return context
 }
