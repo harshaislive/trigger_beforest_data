@@ -3,7 +3,7 @@ import re
 import requests
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Type
+from typing import Type, ClassVar
 from crewai.tools import BaseTool
 from pydantic import BaseModel, Field
 
@@ -149,7 +149,7 @@ class RAGSearchTool(BaseTool):
     description: str = "Search the knowledge base for relevant information. Use this first before web search."
     args_schema: Type[BaseModel] = RAGSearchInput
 
-    BRAND_FILE_HINTS = {
+    BRAND_FILE_HINTS: ClassVar[dict[str, str]] = {
         "beforest": "beforest.co.md",
         "bewild": "bewild.life.md",
         "bewildproduce": "bewild.life.md",
