@@ -59,6 +59,27 @@ How you respond:
 
 def create_crew(message: str, contact_id: str, name: str = "User") -> Crew:
     """Create and return a crew for processing the user message."""
+
+    def should_run_research(text: str) -> bool:
+        lower = text.lower().strip()
+        if len(lower) >= 25:
+            return True
+        triggers = (
+            "what",
+            "how",
+            "why",
+            "where",
+            "when",
+            "which",
+            "tell me",
+            "details",
+            "price",
+            "cost",
+            "collective",
+            "beforest",
+            "?",
+        )
+        return any(t in lower for t in triggers)
     
     research_task = Task(
         description=f"""Research the user's question: {message}
@@ -96,9 +117,15 @@ def create_crew(message: str, contact_id: str, name: str = "User") -> Crew:
         agent=reply_crafter_agent,
     )
     
+    tasks = [memory_task, craft_task]
+    agents = [memory_agent, reply_crafter_agent]
+    if should_run_research(message):
+        tasks = [research_task, memory_task, craft_task]
+        agents = [researcher_agent, memory_agent, reply_crafter_agent]
+
     crew = Crew(
-        agents=[researcher_agent, memory_agent, reply_crafter_agent],
-        tasks=[research_task, memory_task, craft_task],
+        agents=agents,
+        tasks=tasks,
         process=Process.sequential,
         verbose=True,
     )

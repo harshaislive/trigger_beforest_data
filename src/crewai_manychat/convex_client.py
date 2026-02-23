@@ -13,11 +13,15 @@ class ConvexClient:
             raise ValueError("CONVEX_URL is required")
         self.client = ConvexHttpClient(self.convex_url)
 
+    @staticmethod
+    def _clean_args(args: Dict[str, Any]) -> Dict[str, Any]:
+        return {k: v for k, v in args.items() if v is not None}
+
     def _query(self, function_name: str, args: Dict[str, Any]) -> Any:
-        return self.client.query(function_name, args)
+        return self.client.query(function_name, self._clean_args(args))
 
     def _mutation(self, function_name: str, args: Dict[str, Any]) -> Any:
-        return self.client.mutation(function_name, args)
+        return self.client.mutation(function_name, self._clean_args(args))
     
     def get_or_create_user(
         self,
