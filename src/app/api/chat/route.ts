@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { generateAnswer } from '@/lib/llm'
 import { ConvexHttpClient } from 'convex/browser'
 
-const CONVEX_URL = process.env.NEXT_PUBLIC_CONVEX_URL || 'https://impressive-panther-391.convex.cloud'
+const CONVEX_URL = process.env.NEXT_PUBLIC_CONVEX_URL || 'https://quick-caribou-824.convex.cloud'
 const convex = new ConvexHttpClient(CONVEX_URL)
 
 const MANYCHAT_API_KEY = process.env.MANYCHAT_API_KEY
