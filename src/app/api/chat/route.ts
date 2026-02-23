@@ -28,8 +28,8 @@ export async function POST(request: NextRequest) {
     // 1. Get or create user in Convex
     // @ts-ignore
     const convexUserId = await convex.mutation('chat:getOrCreateUser', { 
-      telegramUserId: telegramUserId || null, 
-      instagramUserId: instagramUserId || null,
+      telegramUserId: telegramUserId || undefined, 
+      instagramUserId: instagramUserId || undefined,
       name 
     })
 
