@@ -6,7 +6,7 @@ import { ConvexHttpClient } from 'convex/browser'
 const convex = new ConvexHttpClient('https://quick-caribou-824.convex.cloud')
 
 const MANYCHAT_API_KEY = process.env.MANYCHAT_API_KEY
-const MANYCHAT_API_URL = 'https://api.manychat.com/fb/sending/send'
+const MANYCHAT_API_URL = 'https://api.manychat.com/ig/sending/send'
 
 const GREETINGS = ['hi', 'hello', 'hey', 'hiya', 'good morning', 'good evening', 'good afternoon', 'what\'s up', 'wassup', 'yo']
 
@@ -140,7 +140,12 @@ export async function POST(request: NextRequest) {
       sources,
     })
 
-    // 11. Return response to ManyChat (ManyChat handles sending)
+    // 11. Send via ManyChat API (for Instagram)
+    if (instagramUserId && MANYCHAT_API_KEY) {
+      await sendManyChatMessage(instagramUserId, answer)
+    }
+
+    // 12. Return response to ManyChat
     return NextResponse.json({
       version: 'v2',
       messages: [{ text: answer }],
