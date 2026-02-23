@@ -80,11 +80,23 @@ export async function POST(request: NextRequest) {
     let answer: string
     
     if (isGreet) {
-      answer = `Hey there! I'm TriggerDev. What would you like to know?`
+      answer = `Hey. I'm Forest Guide at Beforest. What would you like to know?`
     } else {
+      // Search knowledge base
+      let context = ''
+      try {
+        // @ts-ignore
+        const knowledgeItems = await convex.query('chat:searchKnowledgeBase', { query: message, limit: 3 })
+        if (knowledgeItems && knowledgeItems.length > 0) {
+          context = knowledgeItems.map((item: { content: string }) => item.content).join('\n\n')
+        }
+      } catch (error) {
+        console.error('Knowledge base error:', error)
+      }
+
       // Generate answer using LLM
       try {
-        answer = await generateAnswer(message, '', [])
+        answer = await generateAnswer(message, context, [])
       } catch (error) {
         console.error('LLM error:', error)
         answer = "I'm processing your request. Could you try again?"
