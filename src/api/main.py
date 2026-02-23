@@ -36,6 +36,17 @@ CANONICAL_BRANDS = [
     "10percent.beforest.co",
 ]
 
+BRAND_RESPONSE_OVERRIDES = {
+    "bewild": {
+        "products": (
+            "On bewild.life, core categories include forest-friendly produce, single origin coffee,"
+            " herbal infusions, rice varieties, pulses, and spices. "
+            "Examples visible from current listings include veggie bags, Canephora coffee,"
+            " Rosella infusion, Mysore Mallige rice, and Mappillai Samba red rice."
+        )
+    }
+}
+
 DOMAIN_ALIASES = {
     "beforest.in": "beforest.co",
     "www.beforest.in": "beforest.co",
@@ -155,6 +166,28 @@ def enforce_canonical_brand_domains(text: str) -> str:
 
     normalized = re.sub(r"\bbeforest\.[a-z]{2,}\b", replace_beforest_domain, normalized, flags=re.IGNORECASE)
     return normalized
+
+
+def apply_brand_no_info_override(user_message: str, answer: str) -> str:
+    lower_q = user_message.lower()
+    lower_a = answer.lower()
+
+    no_info_signals = (
+        "don't have",
+        "do not have",
+        "no specific",
+        "not sure",
+        "no info",
+        "no information",
+    )
+
+    asks_products = any(k in lower_q for k in ("product", "produce", "available", "catalog"))
+    says_no_info = any(s in lower_a for s in no_info_signals)
+
+    if "bewild" in lower_q and asks_products and says_no_info:
+        return BRAND_RESPONSE_OVERRIDES["bewild"]["products"]
+
+    return answer
 
 
 def infer_lead_signals(message: str) -> dict:
@@ -305,6 +338,7 @@ async def chat(request: ManyChatRequest):
 
     answer = answer.replace("\u2014", "-").replace("\u2013", "-")
     answer = enforce_canonical_brand_domains(answer)
+    answer = apply_brand_no_info_override(request.message, answer)
 
     try:
         if user_id:
