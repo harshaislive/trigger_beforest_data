@@ -58,10 +58,6 @@ async function sendManyChatMessage(subscriberId: string, message: string) {
   }
 }
 
-async function triggerDevTask(message: string, contactId: string, name?: string) {
-  // Placeholder - not used without Trigger.dev subscription
-}
-
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -89,6 +85,25 @@ export async function POST(request: NextRequest) {
         console.error('LLM error:', error)
         answer = "I'm processing your request. Could you try again?"
       }
+    }
+
+    // Store message in Convex (non-blocking)
+    const existingUserId = telegramUserId || instagramUserId
+    if (existingUserId) {
+      // @ts-ignore
+      convex.mutation('chat:getOrCreateUser', {
+        telegramUserId: telegramUserId || undefined,
+        instagramUserId: instagramUserId || undefined,
+        name,
+      }).then((convexUserId: string) => {
+        // @ts-ignore
+        convex.mutation('chat:storeChatMessage', {
+          userId: convexUserId,
+          message,
+          response: answer,
+          sources: [],
+        }).catch(console.error)
+      }).catch(console.error)
     }
 
     // Send via ManyChat API (non-blocking)
