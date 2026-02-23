@@ -47,7 +47,6 @@ async function sendManyChatMessage(subscriberId: string, message: string) {
             ],
           },
         },
-        message_tag: 'POST_PURCHASE_UPDATE',
       }),
     })
 
