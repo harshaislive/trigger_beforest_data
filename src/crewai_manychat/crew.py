@@ -146,6 +146,7 @@ def create_crew(message: str, contact_id: str, name: str = "User") -> Crew:
         - Never use em dash characters
         - Help user navigate the Beforest Ecoverse with clear next-step guidance
         - No fluff, no hype, no unnecessary adjectives
+        - If user asks about a known Beforest brand (beforest, bewild, hospitality, experiences, 10percent), never say "no info" without checking provided research context first
         - If info is unavailable or uncertain, say so clearly in one short sentence""",
         expected_output="A single, premium response (2-3 sentences max)",
         agent=reply_crafter_agent,

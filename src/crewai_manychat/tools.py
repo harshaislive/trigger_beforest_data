@@ -149,6 +149,15 @@ class RAGSearchTool(BaseTool):
     description: str = "Search the knowledge base for relevant information. Use this first before web search."
     args_schema: Type[BaseModel] = RAGSearchInput
 
+    BRAND_FILE_HINTS = {
+        "beforest": "beforest.co.md",
+        "bewild": "bewild.life.md",
+        "bewildproduce": "bewild.life.md",
+        "hospitality": "hospitality.beforest.co.md",
+        "experiences": "experiences.beforest.co.md",
+        "10percent": "10percent.beforest.co.md",
+    }
+
     @staticmethod
     def _search_local_beforest_data(query: str, limit: int = 5):
         base_dir = Path(__file__).resolve().parents[2] / "beforest_data"
@@ -158,6 +167,13 @@ class RAGSearchTool(BaseTool):
         terms = [t for t in re.findall(r"[a-zA-Z0-9]+", query.lower()) if len(t) > 2]
         if not terms:
             return []
+
+        query_lower = query.lower()
+        preferred_files = {
+            file_name
+            for key, file_name in RAGSearchTool.BRAND_FILE_HINTS.items()
+            if key in query_lower
+        }
 
         scored = []
         for file_path in sorted(base_dir.glob("*.md")):
@@ -170,6 +186,12 @@ class RAGSearchTool(BaseTool):
             score = 0
             for term in terms:
                 score += len(re.findall(re.escape(term), content_lower))
+
+            if file_path.name in preferred_files:
+                score += 20
+
+            if "produce" in query_lower and file_path.name == "bewild.life.md":
+                score += 30
 
             if score <= 0:
                 continue
@@ -193,6 +215,23 @@ class RAGSearchTool(BaseTool):
             )
 
         scored.sort(key=lambda item: item["score"], reverse=True)
+
+        if not scored and preferred_files:
+            for file_name in preferred_files:
+                file_path = base_dir / file_name
+                if not file_path.exists():
+                    continue
+                content = file_path.read_text(encoding="utf-8", errors="ignore")
+                snippet = " ".join(content[:900].split())
+                scored.append(
+                    {
+                        "title": file_path.stem,
+                        "url": file_path.name,
+                        "content": snippet,
+                        "score": 1,
+                    }
+                )
+
         return scored[:limit]
     
     def _run(self, query: str) -> str:
