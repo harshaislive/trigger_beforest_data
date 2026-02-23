@@ -140,20 +140,11 @@ export async function POST(request: NextRequest) {
       sources,
     })
 
-    // 11. Return immediate response to ManyChat (to prevent timeout)
-    // Then send async response via ManyChat API if needed
-    const responsePayload = {
+    // 11. Return response to ManyChat (ManyChat handles sending)
+    return NextResponse.json({
       version: 'v2',
       messages: [{ text: answer }],
-    }
-
-    // If instagramUserId, also send via ManyChat API for async delivery
-    if (instagramUserId && MANYCHAT_API_KEY) {
-      // Send in background, don't wait
-      sendManyChatMessage(instagramUserId, answer).catch(console.error)
-    }
-
-    return NextResponse.json(responsePayload)
+    })
   } catch (error) {
     console.error('Chat API error:', error)
     return NextResponse.json(
