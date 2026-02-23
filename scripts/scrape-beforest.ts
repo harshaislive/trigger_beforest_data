@@ -2,56 +2,91 @@ import { ConvexHttpClient } from 'convex/browser'
 
 const convex = new ConvexHttpClient('https://impressive-panther-391.convex.cloud')
 
-const pages = [
-  { url: 'https://beforest.co/', title: 'Home' },
-  { url: 'https://beforest.co/about-us/', title: 'About Us' },
-  { url: 'https://beforest.co/farming-collectives/', title: 'What is a Collective' },
-  { url: 'https://beforest.co/the-poomaale-estate/', title: 'Poomaale 1.0' },
-  { url: 'https://beforest.co/poomaale-2-0-collective/', title: 'Poomaale 2.0' },
-  { url: 'https://beforest.co/hyderabad-collective/', title: 'Hyderabad Collective' },
-  { url: 'https://beforest.co/the-mumbai-collective/', title: 'Mumbai Collective' },
-  { url: 'https://beforest.co/the-bhopal-collective/', title: 'Bhopal Collective' },
-  { url: 'https://beforest.co/co-forest/', title: 'Co-Forest (Hammiyala)' },
-  { url: 'https://beforest.co/contact-us/', title: 'Contact' },
-  { url: 'https://beforest.co/careers/', title: 'Careers' },
-  { url: 'https://beforest.co/faq/', title: 'FAQ' },
-]
+const sitemapUrl = 'https://beforest.co/wp-sitemap-posts-page-1.xml'
+
+async function getPagesFromSitemap(): Promise<{ url: string; title: string }[]> {
+  const response = await fetch(sitemapUrl)
+  const xml = await response.text()
+  
+  const urlMatches = xml.match(/<loc>(.*?)<\/loc>/g) || []
+  
+  const pages: { url: string; title: string }[] = []
+  
+  for (const match of urlMatches) {
+    const url = match.replace(/<\/?loc>/g, '')
+    
+    if (url.includes('/sitemap') || 
+        url.includes('/feed') || 
+        url.includes('tag=') || 
+        url.includes('category=') ||
+        url.includes('?') ||
+        url.includes('brochure') ||
+        url.includes('thank-you') ||
+        url.includes('temp') ||
+        url.includes('bebuilder') ||
+        url.includes('virtual-office') ||
+        url.includes('payments') ||
+        url.includes('planter') ||
+        url.includes('shipping') ||
+        url.includes('my-temp') ||
+        url.includes('cupping') ||
+        url.includes('wilderness-collectivess') ||
+        url.includes('awaken') ||
+        url.includes('yoga') ||
+        url.includes('astro') ||
+        url.includes('letter') ||
+        url.includes('fold')) {
+      continue
+    }
+    
+    let title = url.replace('https://beforest.co/', '').replace(/\/$/, '').replace(/-/g, ' ')
+    title = title.charAt(0).toUpperCase() + title.slice(1)
+    
+    pages.push({ url, title })
+  }
+  
+  return pages
+}
+
+async function scrapePage(url: string): Promise<string> {
+  const response = await fetch(url)
+  const html = await response.text()
+  
+  return html
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '')
+    .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '')
+    .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 4000)
+}
 
 async function scrapeAndAdd() {
+  const pages = await getPagesFromSitemap()
+  console.log(`Found ${pages.length} pages`)
+  
+  let count = 0
   for (const page of pages) {
     try {
-      console.log(`Scraping: ${page.url}`)
-      
-      const response = await fetch(page.url)
-      const html = await response.text()
-      
-      // Extract text content (simple approach - remove HTML tags)
-      const text = html
-        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim()
-      
-      // Extract main content (first 3000 chars of meaningful text)
-      const content = text.slice(0, 3000)
-      
-      // Add to Convex
+      const content = await scrapePage(page.url)
       // @ts-ignore
       await convex.mutation('chat:addKnowledgeItem', {
         url: page.url,
         title: page.title,
-        content: content,
-        summary: `Beforest ${page.title} page`,
+        content,
+        summary: `Beforest ${page.title}`,
       })
-      
-      console.log(`Added: ${page.title}`)
+      count++
+      console.log(`Added (${count}/${pages.length}): ${page.title}`)
     } catch (error) {
-      console.error(`Error with ${page.url}:`, error)
+      console.error(`Error: ${page.title}`, error)
     }
   }
   
-  console.log('Done scraping!')
+  console.log(`Done! Added ${count} pages.`)
 }
 
 scrapeAndAdd()
