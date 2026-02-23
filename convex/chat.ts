@@ -2,19 +2,40 @@ import { query, mutation } from './_generated/server'
 import { v } from 'convex/values'
 
 export const getOrCreateUser = mutation({
-  args: { telegramUserId: v.string(), name: v.optional(v.string()) },
+  args: { 
+    telegramUserId: v.optional(v.string()), 
+    instagramUserId: v.optional(v.string()),
+    name: v.optional(v.string()) 
+  },
   handler: async (ctx, args) => {
-    const existing = await ctx.db
-      .query('users')
-      .filter((q) => q.eq(q.field('telegramUserId'), args.telegramUserId))
-      .first()
+    const telegramId = args.telegramUserId
+    const instagramId = args.instagramUserId
 
-    if (existing) {
-      return existing._id
+    if (telegramId) {
+      const existing = await ctx.db
+        .query('users')
+        .filter((q) => q.eq(q.field('telegramUserId'), telegramId))
+        .first()
+
+      if (existing) {
+        return existing._id
+      }
+    }
+
+    if (instagramId) {
+      const existing = await ctx.db
+        .query('users')
+        .filter((q) => q.eq(q.field('instagramUserId'), instagramId))
+        .first()
+
+      if (existing) {
+        return existing._id
+      }
     }
 
     return await ctx.db.insert('users', {
       telegramUserId: args.telegramUserId,
+      instagramUserId: args.instagramUserId,
       name: args.name,
       createdAt: Date.now(),
     })
@@ -88,5 +109,29 @@ export const getRecentKnowledgeItems = query({
       .order('desc')
       .take(args.limit ?? 10)
     return items.reverse()
+  },
+})
+
+export const updateUserState = mutation({
+  args: {
+    userId: v.id('users'),
+    conversationState: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.userId, {
+      conversationState: args.conversationState,
+      lastMessageAt: Date.now(),
+    })
+  },
+})
+
+export const getUserState = query({
+  args: { userId: v.id('users') },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId)
+    return {
+      conversationState: user?.conversationState || 'idle',
+      lastMessageAt: user?.lastMessageAt,
+    }
   },
 })

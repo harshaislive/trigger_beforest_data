@@ -5,12 +5,49 @@ import { ConvexHttpClient } from 'convex/browser'
 
 const convex = new ConvexHttpClient('https://quick-caribou-824.convex.cloud')
 
+const MANYCHAT_API_KEY = process.env.MANYCHAT_API_KEY
+const MANYCHAT_API_URL = 'https://api.manychat.com/fb/sending/send'
+
+const GREETINGS = ['hi', 'hello', 'hey', 'hiya', 'good morning', 'good evening', 'good afternoon', 'what\'s up', 'wassup', 'yo']
+
 const ChatRequestSchema = z.object({
   message: z.string().min(1),
   telegramUserId: z.string().optional(),
   instagramUserId: z.string().optional(),
   name: z.string().optional(),
 })
+
+function isGreeting(message: string): boolean {
+  const lower = message.toLowerCase().trim()
+  return GREETINGS.some(g => lower === g || lower.startsWith(g + ' ') || lower.endsWith(' ' + g))
+}
+
+async function sendManyChatMessage(channelId: string, message: string) {
+  if (!MANYCHAT_API_KEY) {
+    console.error('MANYCHAT_API_KEY not configured')
+    return
+  }
+
+  try {
+    const response = await fetch(MANYCHAT_API_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${MANYCHAT_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        channel_id: channelId,
+        message: message,
+      }),
+    })
+
+    const data = await response.json()
+    console.log('ManyChat response:', data)
+    return data
+  } catch (error) {
+    console.error('Error sending ManyChat message:', error)
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -33,22 +70,54 @@ export async function POST(request: NextRequest) {
       name 
     })
 
-    // 2. Get chat history for context
+    // 2. Get user conversation state
+    // @ts-ignore
+    const userState = await convex.query('chat:getUserState', { userId: convexUserId })
+    const conversationState = userState?.conversationState || 'idle'
+
+    console.log('User state:', conversationState, 'Message:', message)
+
+    // 3. Smart greeting detection - if in idle and just greeting, ask for actual question
+    if (conversationState === 'idle' && isGreeting(message)) {
+      // @ts-ignore
+      await convex.mutation('chat:updateUserState', { 
+        userId: convexUserId, 
+        conversationState: 'waiting_for_query' 
+      })
+
+      const greetingResponse = `[TriggerDev Bot] Hey there! 👋 I'm TriggerDev, your AI assistant. What would you like to know?`
+      
+      return NextResponse.json({
+        version: 'v2',
+        messages: [{ text: greetingResponse }],
+      })
+    }
+
+    // 4. If waiting for query, process normally and reset state
+    if (conversationState === 'waiting_for_query') {
+      // @ts-ignore
+      await convex.mutation('chat:updateUserState', { 
+        userId: convexUserId, 
+        conversationState: 'idle' 
+      })
+    }
+
+    // 5. Get chat history for context
     // @ts-ignore
     const chatHistory = await convex.query('chat:getChatHistory', { userId: convexUserId, limit: 10 })
     const history = Array.isArray(chatHistory) ? chatHistory : []
 
-    // 3. Search knowledge base
+    // 6. Search knowledge base
     // @ts-ignore
     const knowledgeItems = await convex.query('chat:searchKnowledgeBase', { query: message, limit: 5 })
     const knowledge = Array.isArray(knowledgeItems) ? knowledgeItems : []
 
-    console.log('Knowledge items found:', knowledge.length, knowledge)
+    console.log('Knowledge items found:', knowledge.length)
 
-    // 4. Build context for LLM
+    // 7. Build context for LLM
     const context = buildContext(history, knowledge)
 
-    // 5. Generate answer using LLM directly
+    // 8. Generate answer using LLM
     const answer = await generateAnswer(
       message,
       context,
@@ -58,11 +127,11 @@ export async function POST(request: NextRequest) {
       }))
     )
 
-    // Extract sources from knowledge items
+    // 9. Extract sources
     const sources = knowledge.map((item: { url: string }) => item.url)
     console.log('Sources:', sources)
 
-    // 6. Store the message and response
+    // 10. Store the message and response
     // @ts-ignore
     await convex.mutation('chat:storeChatMessage', {
       userId: convexUserId,
@@ -71,15 +140,20 @@ export async function POST(request: NextRequest) {
       sources,
     })
 
-    // ManyChat expects this format
-    return NextResponse.json({
+    // 11. Return immediate response to ManyChat (to prevent timeout)
+    // Then send async response via ManyChat API if needed
+    const responsePayload = {
       version: 'v2',
-      messages: [
-        {
-          text: answer,
-        },
-      ],
-    })
+      messages: [{ text: answer }],
+    }
+
+    // If instagramUserId, also send via ManyChat API for async delivery
+    if (instagramUserId && MANYCHAT_API_KEY) {
+      // Send in background, don't wait
+      sendManyChatMessage(instagramUserId, answer).catch(console.error)
+    }
+
+    return NextResponse.json(responsePayload)
   } catch (error) {
     console.error('Chat API error:', error)
     return NextResponse.json(

@@ -3,8 +3,11 @@ import { v } from 'convex/values'
 
 export default defineSchema({
   users: defineTable({
-    telegramUserId: v.string(),
+    telegramUserId: v.optional(v.string()),
+    instagramUserId: v.optional(v.string()),
     name: v.optional(v.string()),
+    conversationState: v.optional(v.string()), // "idle", "waiting_for_query"
+    lastMessageAt: v.optional(v.number()),
     createdAt: v.number(),
   }),
 
