@@ -87,8 +87,12 @@ export async function POST(request: NextRequest) {
       try {
         // @ts-ignore
         const knowledgeItems = await convex.query('chat:searchKnowledgeBase', { query: message, limit: 3 })
+        console.log('Knowledge items found:', knowledgeItems?.length || 0)
         if (knowledgeItems && knowledgeItems.length > 0) {
           context = knowledgeItems.map((item: { content: string }) => item.content).join('\n\n')
+          console.log('Context length:', context.length)
+        } else {
+          console.log('No knowledge items found for query:', message)
         }
       } catch (error) {
         console.error('Knowledge base error:', error)
@@ -99,7 +103,7 @@ export async function POST(request: NextRequest) {
         answer = await generateAnswer(message, context, [])
       } catch (error) {
         console.error('LLM error:', error)
-        answer = "I'm processing your request. Could you try again?"
+        answer = "I'm not sure about that. What else would you like to know?"
       }
     }
 
