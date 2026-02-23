@@ -5,11 +5,13 @@ export const getOrCreateUser = mutation({
   args: { 
     telegramUserId: v.optional(v.string()), 
     instagramUserId: v.optional(v.string()),
+    contactId: v.optional(v.string()),
     name: v.optional(v.string()) 
   },
   handler: async (ctx, args) => {
     const telegramId = args.telegramUserId
     const instagramId = args.instagramUserId
+    const contactId = args.contactId
 
     if (telegramId) {
       const existing = await ctx.db
@@ -33,9 +35,21 @@ export const getOrCreateUser = mutation({
       }
     }
 
+    if (contactId) {
+      const existing = await ctx.db
+        .query('users')
+        .filter((q) => q.eq(q.field('contactId'), contactId))
+        .first()
+
+      if (existing) {
+        return existing._id
+      }
+    }
+
     return await ctx.db.insert('users', {
       telegramUserId: args.telegramUserId,
       instagramUserId: args.instagramUserId,
+      contactId: args.contactId,
       name: args.name,
       createdAt: Date.now(),
     })

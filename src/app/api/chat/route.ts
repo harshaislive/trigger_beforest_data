@@ -96,6 +96,7 @@ export async function POST(request: NextRequest) {
         const convexUserId = await convex.mutation('chat:getOrCreateUser', {
           telegramUserId: telegramUserId || undefined,
           instagramUserId: instagramUserId || undefined,
+          contactId: contactId || undefined,
           name,
         })
         console.log('Got convex user ID:', convexUserId)
