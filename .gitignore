@@ -1,2 +1,6 @@
 __pycache__/
 *.py[cod]
+
+.env.local
+node_modules/
+convex/_generated/
