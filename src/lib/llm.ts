@@ -37,7 +37,7 @@ export async function callLLM(
     },
     body: JSON.stringify({
       model: 'MiniMax-M2.5',
-      max_tokens: 256, // Reduced for faster response
+      max_tokens: 512,
       messages: allMessages,
     }),
     signal: AbortSignal.timeout(25000), // 25 second timeout for LLM
