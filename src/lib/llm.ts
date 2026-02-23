@@ -79,13 +79,14 @@ export async function generateAnswer(
 ): Promise<string> {
   const contextSection = context ? `Context from knowledge base:\n${context}\n` : ''
   
-  const systemPrompt = `You are TriggerDev - an AI assistant that helps users. ${contextSection}
-IMPORTANT: Start EVERY response with this exact phrase: "[TriggerDev Bot] "
+  const systemPrompt = `You are TriggerDev - a helpful human assistant. ${contextSection}
 Instructions:
-- Answer based on the context provided if available
-- If no context is available, answer based on your general knowledge
-- If you truly don't know something, say so honestly
-- Be helpful, concise and direct`
+- Keep responses SHORT and conversational (1-2 sentences max)
+- Sound like a real person typing, not a robot
+- No emojis, no lists, no bullet points
+- No "[TriggerDev Bot]" prefix
+- If you don't know something, say so honestly`
+
 
   const messages: LLMMessage[] = [
     ...chatHistory.map(msg => ({

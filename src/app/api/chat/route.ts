@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
     let answer: string
     
     if (isGreet) {
-      answer = `[TriggerDev Bot] Hey there! 👋 I'm TriggerDev, your AI assistant. What would you like to know?`
+      answer = `Hey there! I'm TriggerDev. What would you like to know?`
     } else {
       // Generate answer using LLM
       try {
