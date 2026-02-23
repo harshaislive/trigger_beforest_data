@@ -6,7 +6,7 @@ import { ConvexHttpClient } from 'convex/browser'
 const convex = new ConvexHttpClient('https://quick-caribou-824.convex.cloud')
 
 const MANYCHAT_API_KEY = process.env.MANYCHAT_API_KEY
-const MANYCHAT_API_URL = 'https://api.manychat.com/ig/sending/send'
+const MANYCHAT_API_URL = 'https://api.manychat.com/fb/sending/sendContent'
 
 const GREETINGS = ['hi', 'hello', 'hey', 'hiya', 'good morning', 'good evening', 'good afternoon', 'what\'s up', 'wassup', 'yo']
 
@@ -22,7 +22,7 @@ function isGreeting(message: string): boolean {
   return GREETINGS.some(g => lower === g || lower.startsWith(g + ' ') || lower.endsWith(' ' + g))
 }
 
-async function sendManyChatMessage(channelId: string, message: string) {
+async function sendManyChatMessage(subscriberId: string, message: string) {
   if (!MANYCHAT_API_KEY) {
     console.error('MANYCHAT_API_KEY not configured')
     return
@@ -36,8 +36,15 @@ async function sendManyChatMessage(channelId: string, message: string) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        channel_id: channelId,
-        message: message,
+        subscriber_id: parseInt(subscriberId),
+        data: {
+          version: 'v2',
+          content: {
+            messages: [
+              { type: 'text', text: message },
+            ],
+          },
+        },
       }),
     })
 
