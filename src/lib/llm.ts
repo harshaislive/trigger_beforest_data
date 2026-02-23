@@ -40,7 +40,7 @@ export async function callLLM(
       max_tokens: 256, // Reduced for faster response
       messages: allMessages,
     }),
-    signal: AbortSignal.timeout(6000), // 6 second timeout
+    signal: AbortSignal.timeout(25000), // 25 second timeout for LLM
   })
 
   console.log('Minimax response status:', response.status)
