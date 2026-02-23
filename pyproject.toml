@@ -11,9 +11,10 @@ dependencies = [
     "uvicorn>=0.23.0",
     "pydantic>=2.0.0",
     "python-dotenv>=1.0.0",
-    "convex>=1.32.0",
+    "convex>=0.7.0",
     "requests>=2.31.0",
     "litellm>=1.51.0",
+    "apscheduler>=3.10.4",
 ]
 
 [project.optional-dependencies]

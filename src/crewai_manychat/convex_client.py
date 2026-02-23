@@ -1,6 +1,7 @@
 import os
-import requests
 from typing import List, Dict, Any, Optional
+
+from convex import ConvexClient as ConvexHttpClient
 
 
 class ConvexClient:
@@ -10,30 +11,13 @@ class ConvexClient:
         self.convex_url = (convex_url or os.getenv("CONVEX_URL") or "").rstrip("/")
         if not self.convex_url:
             raise ValueError("CONVEX_URL is required")
-
-    def _make_request(self, endpoint: str, function_name: str, args: Dict[str, Any]) -> Any:
-        url = f"{self.convex_url}/api/{endpoint}"
-        response = requests.post(
-            url,
-            json={"path": function_name, "args": args},
-            headers={
-                "Content-Type": "application/json",
-                "Convex-Client": "python-crewai-manychat/1.0",
-            },
-            timeout=20,
-        )
-        response.raise_for_status()
-        payload = response.json()
-
-        if isinstance(payload, dict) and "value" in payload:
-            return payload["value"]
-        return payload
+        self.client = ConvexHttpClient(self.convex_url)
 
     def _query(self, function_name: str, args: Dict[str, Any]) -> Any:
-        return self._make_request("query", function_name, args)
+        return self.client.query(function_name, args)
 
     def _mutation(self, function_name: str, args: Dict[str, Any]) -> Any:
-        return self._make_request("mutation", function_name, args)
+        return self.client.mutation(function_name, args)
     
     def get_or_create_user(
         self,
