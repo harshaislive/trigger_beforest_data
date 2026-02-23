@@ -16,6 +16,7 @@ const ChatRequestSchema = z.object({
   instagramUserId: z.string().optional(),
   name: z.string().optional(),
   contactId: z.string().optional(),
+  contact_id: z.string().optional(),
 })
 
 function isGreeting(message: string): boolean {
@@ -61,15 +62,18 @@ async function sendManyChatMessage(subscriberId: string, message: string) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { message, telegramUserId, instagramUserId, name, contactId } = ChatRequestSchema.parse(body)
+    const { message, telegramUserId, instagramUserId, name, contactId, contact_id } = ChatRequestSchema.parse(body)
 
     const userId = telegramUserId || instagramUserId
-    if (!userId && !contactId) {
+    if (!userId && !contactId && !contact_id) {
       return NextResponse.json(
         { error: 'Either telegramUserId, instagramUserId, or contactId is required' },
         { status: 400 }
       )
     }
+
+    // Use contactId or contact_id (ManyChat sends snake_case)
+    const finalContactId = contactId || contact_id
 
     // Check for greeting
     const isGreet = isGreeting(message)
@@ -88,15 +92,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Store message in Convex (blocking for now)
-    const existingUserId = telegramUserId || instagramUserId || contactId
+    const existingUserId = telegramUserId || instagramUserId || finalContactId
     if (existingUserId) {
-      console.log('Storing to Convex:', { telegramUserId, instagramUserId, contactId, name })
+      console.log('Storing to Convex:', { telegramUserId, instagramUserId, finalContactId, name })
       try {
         // @ts-ignore
         const convexUserId = await convex.mutation('chat:getOrCreateUser', {
           telegramUserId: telegramUserId || undefined,
           instagramUserId: instagramUserId || undefined,
-          contactId: contactId || undefined,
+          contactId: finalContactId || undefined,
           name,
         })
         console.log('Got convex user ID:', convexUserId)
@@ -115,8 +119,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Send via ManyChat API (non-blocking)
-    if (contactId && MANYCHAT_API_KEY) {
-      sendManyChatMessage(contactId, answer).catch(console.error)
+    if (finalContactId && MANYCHAT_API_KEY) {
+      sendManyChatMessage(finalContactId, answer).catch(console.error)
     }
 
     // Return response to ManyChat
