@@ -10,6 +10,10 @@ const MANYCHAT_API_KEY = process.env.MANYCHAT_API_KEY
 const MANYCHAT_API_URL = 'https://api.manychat.com/fb/sending/sendContent'
 const BRAVE_API_KEY = process.env.BRAVE_API_KEY
 
+// Trigger.dev - use cloud
+const TRIGGER_API_URL = process.env.TRIGGER_API_URL || 'https://api.trigger.dev'
+const TRIGGER_API_KEY = process.env.TRIGGER_API_KEY
+
 const GREETINGS = ['hi', 'hello', 'hey', 'hiya', 'good morning', 'good evening', 'good afternoon', 'what\'s up', 'wassup', 'yo']
 
 const ChatRequestSchema = z.object({
@@ -86,6 +90,34 @@ async function searchBrave(query: string): Promise<string> {
   }
 }
 
+async function triggerDevTask(message: string, contactId: string, name?: string) {
+  if (!TRIGGER_API_KEY) {
+    console.error('TRIGGER_API_KEY not configured')
+    return
+  }
+
+  try {
+    const response = await fetch(`${TRIGGER_API_URL}/api/v1/tasks/answer-query/trigger`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${TRIGGER_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message,
+        contactId,
+        name,
+      }),
+    })
+
+    const data = await response.json()
+    console.log('Trigger.dev response:', data)
+    return data
+  } catch (error) {
+    console.error('Trigger.dev error:', error)
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -110,40 +142,17 @@ export async function POST(request: NextRequest) {
     if (isGreet) {
       answer = `Hey. I'm Forest Guide at Beforest. What would you like to know?`
     } else {
-      // Get chat history for context
-      let chatHistory: { role: string; content: string }[] = []
-      
-      const existingUserId = telegramUserId || instagramUserId || finalContactId
-      
-      if (existingUserId) {
-        try {
-          // @ts-ignore
-          convexUserId = await convex.mutation('chat:getOrCreateUser', {
-            telegramUserId: telegramUserId || undefined,
-            instagramUserId: instagramUserId || undefined,
-            contactId: finalContactId || undefined,
-            name,
-          })
-          
-          // @ts-ignore
-          const history = await convex.query('chat:getChatHistory', { userId: convexUserId, limit: 6 })
-          if (history && history.length > 0) {
-            chatHistory = history.map((h: { message: string; response?: string }) => ({
-              role: 'user',
-              content: h.message,
-            }))
-            // Add assistant responses
-            history.forEach((h: { message: string; response?: string }) => {
-              if (h.response) {
-                chatHistory.push({ role: 'assistant', content: h.response })
-              }
-            })
-          }
-        } catch (error) {
-          console.error('History error:', error)
-        }
+      // Just trigger Trigger.dev and return immediately - it handles everything
+      if (TRIGGER_API_KEY) {
+        triggerDevTask(message, finalContactId || '', name).catch(console.error)
+        
+        return NextResponse.json({
+          version: 'v2',
+          messages: [{ text: 'Let me think about that...' }],
+        })
       }
 
+      // Fallback to direct LLM if no Trigger.dev
       // Search knowledge base
       let context = ''
       let sources = ''
@@ -160,30 +169,26 @@ export async function POST(request: NextRequest) {
           if (urls.length > 0) {
             sources = `\n\nSources: ${urls.join(', ')}`
           }
-          console.log('Context length:', context.length)
         }
       } catch (error) {
         console.error('Knowledge base error:', error)
       }
 
-      // Append sources to context
       context = context + sources
 
       // Fallback to Brave Search if no context
       if (!context && BRAVE_API_KEY) {
-        console.log('Using Brave Search as fallback...')
         const braveResults = await searchBrave(`${message} Beforest`)
         if (braveResults) {
           context = `Web search results:\n${braveResults}`
         }
       }
 
-      // Generate answer using LLM
+      // Generate answer
       try {
-        answer = await generateAnswer(message, context, chatHistory)
+        answer = await generateAnswer(message, context, [])
       } catch (error) {
-        console.error('LLM error:', error)
-        answer = "I'm not sure about that. What else would you like to know?"
+        answer = "I'm not sure about that."
       }
     }
 
