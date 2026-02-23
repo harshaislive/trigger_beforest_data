@@ -3,12 +3,6 @@
   "description": "ManyChat integration with CrewAI using MiniMax LLM",
   "repository": "https://github.com/harshaislive/trigger_beforest_data",
   "build_pack": "nixpacks",
-  "build_command": "uv sync",
-  "start_command": "uvicorn src.api.main:app --host 0.0.0.0 --port 3000",
-  "install_command": "uv sync",
-  "python": {
-    "version": "3.11"
-  },
   "environment": {
     "MINIMAX_API_KEY": "",
     "MINIMAX_API_URL": "https://api.minimax.io/anthropic",
