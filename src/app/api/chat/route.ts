@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { generateAnswer } from '@/lib/llm'
 import { ConvexHttpClient } from 'convex/browser'
 
 const convex = new ConvexHttpClient('https://quick-caribou-824.convex.cloud')
 
 const MANYCHAT_API_KEY = process.env.MANYCHAT_API_KEY
 const MANYCHAT_API_URL = 'https://api.manychat.com/fb/sending/sendContent'
+const TRIGGERDEV_API_URL = process.env.TRIGGERDEV_API_URL
+const TRIGGERDEV_API_KEY = process.env.TRIGGERDEV_API_KEY
 
 const GREETINGS = ['hi', 'hello', 'hey', 'hiya', 'good morning', 'good evening', 'good afternoon', 'what\'s up', 'wassup', 'yo']
 
@@ -58,6 +59,34 @@ async function sendManyChatMessage(subscriberId: string, message: string) {
   }
 }
 
+async function triggerDevTask(message: string, contactId: string, name?: string) {
+  if (!TRIGGERDEV_API_URL || !TRIGGERDEV_API_KEY) {
+    console.error('TRIGGERDEV_API_URL or TRIGGERDEV_API_KEY not configured')
+    return
+  }
+
+  try {
+    const response = await fetch(`${TRIGGERDEV_API_URL}/api/v1/tasks/answer-query/trigger`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${TRIGGERDEV_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message,
+        contactId,
+        name,
+      }),
+    })
+
+    const data = await response.json()
+    console.log('Trigger.dev response:', data)
+    return data
+  } catch (error) {
+    console.error('Error triggering Trigger.dev:', error)
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -71,37 +100,34 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Skip Convex for now - direct LLM call
-
-    // Check for greeting
+    // Check for greeting - handle immediately
     const isGreet = isGreeting(message)
-    let answer: string
     
     if (isGreet) {
-      answer = `[TriggerDev Bot] Hey there! 👋 I'm TriggerDev, your AI assistant. What would you like to know?`
-    } else {
-      // Generate answer using LLM
-      try {
-        answer = await generateAnswer(message, '', [])
-      } catch (error) {
-        console.error('LLM error:', error)
-        answer = "I'm processing your request. Could you try again?"
+      const answer = `[TriggerDev Bot] Hey there! 👋 I'm TriggerDev, your AI assistant. What would you like to know?`
+      
+      // Send greeting via ManyChat API (non-blocking)
+      if (contactId && MANYCHAT_API_KEY) {
+        sendManyChatMessage(contactId, answer).catch(console.error)
       }
+
+      return NextResponse.json({
+        version: 'v2',
+        messages: [{ text: answer }],
+        _timestamp: Date.now(),
+      })
     }
 
-    // Send via ManyChat API using contactId as subscriber_id (non-blocking)
-    if (contactId && MANYCHAT_API_KEY) {
-      sendManyChatMessage(contactId, answer).catch(console.error)
+    // For non-greetings, trigger Trigger.dev to handle async
+    if (contactId && TRIGGERDEV_API_URL && TRIGGERDEV_API_KEY) {
+      triggerDevTask(message, contactId, name).catch(console.error)
     }
 
-    // Return response to ManyChat immediately (non-blocking)
-    const response = NextResponse.json({
+    // Return immediate response to ManyChat
+    return NextResponse.json({
       version: 'v2',
-      messages: [{ text: answer }],
-      _timestamp: Date.now(),
+      messages: [{ text: 'I\'m processing your request...', _timestamp: Date.now() }],
     })
-    response.headers.set('Cache-Control', 'no-store, must-revalidate')
-    return response
   } catch (error) {
     console.error('Chat API error:', error)
     return NextResponse.json(
