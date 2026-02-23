@@ -61,7 +61,7 @@ def send_manychat_message(subscriber_id: str, message: str) -> dict:
 @app.post("/api/chat", response_model=ManyChatResponse)
 async def chat(request: ManyChatRequest):
     from crewai_manychat.crew import run_crew
-    from crewai_manychat.convex_client import convex_client
+    from crewai_manychat.convex_client import get_convex_client
     
     if not request.contact_id:
         raise HTTPException(status_code=400, detail="contact_id is required")
@@ -70,7 +70,7 @@ async def chat(request: ManyChatRequest):
         raise HTTPException(status_code=400, detail="message is required")
     
     try:
-        convex_client.get_or_create_user(
+        get_convex_client().get_or_create_user(
             instagram_user_id=request.instagramUserId,
             contact_id=request.contact_id,
             name=request.name,
@@ -92,9 +92,10 @@ async def chat(request: ManyChatRequest):
             answer = "I'm thinking... give me a moment."
     
     try:
-        user = convex_client.get_user_by_contact_id(request.contact_id)
+        client = get_convex_client()
+        user = client.get_user_by_contact_id(request.contact_id)
         if user:
-            convex_client.store_chat_message(
+            client.store_chat_message(
                 user_id=user["_id"],
                 message=request.message,
                 response=answer,
@@ -115,4 +116,4 @@ async def chat(request: ManyChatRequest):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    return {"status": "ok", "app": "crewai-manychat"}

@@ -71,5 +71,11 @@ class ConvexClient:
         return result
 
 
-# Global client instance
-convex_client = ConvexClient()
+# Global client instance - initialized lazily
+convex_client = None
+
+def get_convex_client():
+    global convex_client
+    if convex_client is None:
+        convex_client = ConvexClient()
+    return convex_client
