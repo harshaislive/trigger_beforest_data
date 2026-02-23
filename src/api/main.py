@@ -1,11 +1,12 @@
 import os
 import time
 import re
-from typing import Optional
+import json
+from typing import Optional, Any
 
 import requests
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 app = FastAPI(title="CrewAI ManyChat")
@@ -29,10 +30,15 @@ GREETINGS = [
 
 
 class ManyChatRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     message: str
     instagramUserId: Optional[str] = None
     name: Optional[str] = None
     contact_id: Optional[str] = None
+    flow_id: Optional[str] = None
+    campaign_id: Optional[str] = None
+    message_id: Optional[str] = None
 
 
 class ManyChatResponse(BaseModel):
@@ -119,18 +125,129 @@ def split_message_chunks(text: str, max_chars: int = 240) -> list[str]:
     return chunks or [cleaned]
 
 
+def infer_lead_signals(message: str) -> dict:
+    lower = message.lower()
+
+    intent_rules = [
+        ("investment", ["invest", "investment", "returns", "roi"]),
+        ("stay", ["stay", "book", "booking", "room", "night", "hospitality"]),
+        ("experience", ["experience", "retreat", "workshop", "event", "visit"]),
+        ("partnership", ["partner", "collab", "collaborate", "media", "press"]),
+        ("community", ["collective", "community", "membership", "join"]),
+    ]
+
+    intent = "general"
+    for key, terms in intent_rules:
+        if any(t in lower for t in terms):
+            intent = key
+            break
+
+    score = 25
+    if "?" in lower:
+        score += 10
+    if any(t in lower for t in ["price", "cost", "book", "visit", "join", "interested"]):
+        score += 25
+    if any(t in lower for t in ["today", "now", "asap", "this week"]):
+        score += 15
+    if any(t in lower for t in ["just browsing", "curious", "maybe"]):
+        score -= 10
+    score = max(0, min(100, score))
+
+    stage = "awareness"
+    if any(t in lower for t in ["details", "how", "what", "where", "which", "price", "cost"]):
+        stage = "consideration"
+    if any(t in lower for t in ["book", "visit", "schedule", "call", "when can i"]):
+        stage = "intent"
+    if any(t in lower for t in ["paid", "confirmed", "done booking"]):
+        stage = "conversion"
+
+    follow_up_hours = 24
+    if score >= 70 or stage == "intent":
+        follow_up_hours = 4
+    elif score >= 50:
+        follow_up_hours = 12
+
+    follow_up_ms = int(time.time() * 1000) + follow_up_hours * 60 * 60 * 1000
+
+    return {
+        "intent": intent,
+        "score": score,
+        "stage": stage,
+        "follow_up_ms": follow_up_ms,
+        "follow_up_hours": follow_up_hours,
+    }
+
+
+def parse_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"true", "1", "yes", "y"}
+    return False
+
+
+def parse_int(value: Any) -> int:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        cleaned = value.replace(",", "").strip()
+        if cleaned.isdigit():
+            return int(cleaned)
+    return 0
+
+
+def build_follow_up_message(name: str, intent: str) -> str:
+    first_name = (name or "there").split()[0]
+    if intent == "stay":
+        return f"Hey {first_name}, want me to share stay options and best dates to visit?"
+    if intent == "investment":
+        return f"Hey {first_name}, I can share the next step to evaluate Beforest investment fit."
+    if intent == "experience":
+        return f"Hey {first_name}, I can help you pick an experience that matches your pace."
+    if intent == "community":
+        return f"Hey {first_name}, want a quick breakdown of collectives and who each one is for?"
+    return f"Hey {first_name}, happy to help with the next step when you are ready."
+
+
 @app.post("/api/chat", response_model=ManyChatResponse)
 async def chat(request: ManyChatRequest):
     from src.crewai_manychat.convex_client import get_convex_client
     from src.crewai_manychat.crew import run_crew
 
     user_id = None
+    payload = request.model_dump(exclude_none=True)
+    core_fields = {
+        "message",
+        "instagramUserId",
+        "name",
+        "contact_id",
+        "flow_id",
+        "campaign_id",
+        "message_id",
+    }
+    metadata = {k: v for k, v in payload.items() if k not in core_fields}
 
     if not request.contact_id:
         raise HTTPException(status_code=400, detail="contact_id is required")
 
     if not request.message:
         raise HTTPException(status_code=400, detail="message is required")
+
+    if request.message_id:
+        try:
+            incoming = get_convex_client().register_incoming_message(
+                message_id=request.message_id,
+                contact_id=request.contact_id,
+            )
+            if incoming.get("isDuplicate"):
+                return ManyChatResponse(
+                    messages=[],
+                    _timestamp=int(time.time() * 1000),
+                )
+        except Exception as e:
+            print(f"Idempotency check error: {e}")
 
     try:
         user_id = get_convex_client().get_or_create_user(
@@ -158,10 +275,54 @@ async def chat(request: ManyChatRequest):
 
     try:
         if user_id:
-            get_convex_client().store_chat_message(
+            client = get_convex_client()
+            client.store_chat_message(
                 user_id=user_id,
                 message=request.message,
                 response=answer,
+            )
+
+            lead = infer_lead_signals(request.message)
+
+            if parse_bool(metadata.get("is_ig_verified_user")):
+                lead["score"] = min(100, lead["score"] + 10)
+
+            followers = parse_int(metadata.get("ig_followers_count"))
+            if followers >= 10000:
+                lead["score"] = min(100, lead["score"] + 15)
+            elif followers >= 3000:
+                lead["score"] = min(100, lead["score"] + 8)
+
+            client.update_lead_profile(
+                user_id=user_id,
+                lead_intent=lead["intent"],
+                lead_score=lead["score"],
+                funnel_stage=lead["stage"],
+                next_follow_up_at=lead["follow_up_ms"],
+                last_outcome="replied",
+            )
+
+            client.upsert_pending_follow_up(
+                user_id=user_id,
+                scheduled_for=lead["follow_up_ms"],
+                message_draft=build_follow_up_message(request.name or "there", lead["intent"]),
+                reason=f"auto_follow_up_{lead['stage']}",
+            )
+
+            details = {
+                "intent": lead["intent"],
+                "score": lead["score"],
+                "stage": lead["stage"],
+                "contact_id": request.contact_id,
+                "flow_id": request.flow_id,
+                "campaign_id": request.campaign_id,
+                "message_id": request.message_id,
+                "metadata": metadata,
+            }
+            client.log_lead_event(
+                user_id=user_id,
+                event_type="incoming_message",
+                details=json.dumps({k: v for k, v in details.items() if v is not None}),
             )
     except Exception as e:
         print(f"Convex store error: {e}")

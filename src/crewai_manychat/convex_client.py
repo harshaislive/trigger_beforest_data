@@ -126,6 +126,64 @@ class ConvexClient:
         })
         return result
 
+    def update_lead_profile(
+        self,
+        user_id: str,
+        lead_intent: Optional[str] = None,
+        lead_score: Optional[int] = None,
+        funnel_stage: Optional[str] = None,
+        next_follow_up_at: Optional[int] = None,
+        last_outcome: Optional[str] = None,
+    ) -> str:
+        """Update lead state fields on user profile."""
+        return self._mutation("chat:updateLeadProfile", {
+            "userId": user_id,
+            "leadIntent": lead_intent,
+            "leadScore": lead_score,
+            "funnelStage": funnel_stage,
+            "nextFollowUpAt": next_follow_up_at,
+            "lastOutcome": last_outcome,
+        })
+
+    def log_lead_event(
+        self,
+        user_id: str,
+        event_type: str,
+        details: Optional[str] = None,
+    ) -> str:
+        """Log a lead event for analytics and automation."""
+        return self._mutation("chat:logLeadEvent", {
+            "userId": user_id,
+            "eventType": event_type,
+            "details": details,
+        })
+
+    def upsert_pending_follow_up(
+        self,
+        user_id: str,
+        scheduled_for: int,
+        message_draft: str,
+        reason: Optional[str] = None,
+    ) -> str:
+        """Create or update pending follow-up task for user."""
+        return self._mutation("chat:upsertPendingFollowUp", {
+            "userId": user_id,
+            "scheduledFor": scheduled_for,
+            "messageDraft": message_draft,
+            "reason": reason,
+        })
+
+    def register_incoming_message(
+        self,
+        message_id: str,
+        contact_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Register inbound message ID for idempotency checks."""
+        return self._mutation("chat:registerIncomingMessage", {
+            "messageId": message_id,
+            "contactId": contact_id,
+        })
+
 
 # Global client instance - initialized lazily
 convex_client = None

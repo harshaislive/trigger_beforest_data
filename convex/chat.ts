@@ -126,13 +126,141 @@ export const storeChatMessage = mutation({
     sources: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
-    return await ctx.db.insert('chatMessages', {
+    const now = Date.now()
+    const id = await ctx.db.insert('chatMessages', {
       userId: args.userId,
       message: args.message,
       response: args.response,
       sources: args.sources,
+      createdAt: now,
+    })
+
+    await ctx.db.patch(args.userId, {
+      lastMessageAt: now,
+      lastResponseAt: now,
+      lastOutcome: 'responded',
+    })
+
+    return id
+  },
+})
+
+export const updateLeadProfile = mutation({
+  args: {
+    userId: v.id('users'),
+    leadIntent: v.optional(v.string()),
+    leadScore: v.optional(v.number()),
+    funnelStage: v.optional(v.string()),
+    nextFollowUpAt: v.optional(v.number()),
+    lastOutcome: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const patch: Record<string, string | number | undefined> = {}
+    if (args.leadIntent !== undefined) patch.leadIntent = args.leadIntent
+    if (args.leadScore !== undefined) patch.leadScore = args.leadScore
+    if (args.funnelStage !== undefined) patch.funnelStage = args.funnelStage
+    if (args.nextFollowUpAt !== undefined) patch.nextFollowUpAt = args.nextFollowUpAt
+    if (args.lastOutcome !== undefined) patch.lastOutcome = args.lastOutcome
+
+    await ctx.db.patch(args.userId, patch)
+    return args.userId
+  },
+})
+
+export const logLeadEvent = mutation({
+  args: {
+    userId: v.id('users'),
+    eventType: v.string(),
+    details: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db.insert('leadEvents', {
+      userId: args.userId,
+      eventType: args.eventType,
+      details: args.details,
       createdAt: Date.now(),
     })
+  },
+})
+
+export const upsertPendingFollowUp = mutation({
+  args: {
+    userId: v.id('users'),
+    scheduledFor: v.number(),
+    messageDraft: v.string(),
+    reason: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const pending = await ctx.db
+      .query('followUps')
+      .filter((q) => q.and(q.eq(q.field('userId'), args.userId), q.eq(q.field('status'), 'pending')))
+      .first()
+
+    if (pending) {
+      await ctx.db.patch(pending._id, {
+        scheduledFor: args.scheduledFor,
+        messageDraft: args.messageDraft,
+        reason: args.reason,
+      })
+      return pending._id
+    }
+
+    return await ctx.db.insert('followUps', {
+      userId: args.userId,
+      status: 'pending',
+      scheduledFor: args.scheduledFor,
+      messageDraft: args.messageDraft,
+      reason: args.reason,
+      createdAt: Date.now(),
+    })
+  },
+})
+
+export const getDueFollowUps = query({
+  args: { now: v.optional(v.number()), limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const now = args.now ?? Date.now()
+    const rows = await ctx.db
+      .query('followUps')
+      .withIndex('by_status_scheduled', (q) => q.eq('status', 'pending').lte('scheduledFor', now))
+      .take(args.limit ?? 20)
+    return rows
+  },
+})
+
+export const markFollowUpSent = mutation({
+  args: { followUpId: v.id('followUps') },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.followUpId, {
+      status: 'sent',
+      sentAt: Date.now(),
+    })
+    return args.followUpId
+  },
+})
+
+export const registerIncomingMessage = mutation({
+  args: {
+    messageId: v.string(),
+    contactId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query('inboundMessages')
+      .withIndex('by_message_id', (q) => q.eq('messageId', args.messageId))
+      .first()
+
+    if (existing) {
+      return { isDuplicate: true, id: existing._id }
+    }
+
+    const id = await ctx.db.insert('inboundMessages', {
+      messageId: args.messageId,
+      contactId: args.contactId,
+      createdAt: Date.now(),
+    })
+
+    return { isDuplicate: false, id }
   },
 })
 
