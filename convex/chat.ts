@@ -90,13 +90,22 @@ export const storeChatMessage = mutation({
 export const searchKnowledgeBase = query({
   args: { query: v.string(), limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    const allItems = await ctx.db.query('knowledgeItems').take(args.limit ?? 20)
+    const allItems = await ctx.db.query('knowledgeItems').take(args.limit ?? 50)
+    
+    if (!args.query) return allItems.slice(0, args.limit ?? 5)
     
     const queryLower = args.query.toLowerCase()
-    return allItems.filter(item => 
-      item.content.toLowerCase().includes(queryLower) ||
-      (item.title && item.title.toLowerCase().includes(queryLower))
-    )
+    const words = queryLower.split(' ').filter(w => w.length > 2)
+    
+    return allItems.filter(item => {
+      const contentLower = item.content.toLowerCase()
+      const titleLower = (item.title || '').toLowerCase()
+      
+      // Match any word from query
+      return words.some(word => 
+        contentLower.includes(word) || titleLower.includes(word)
+      )
+    }).slice(0, args.limit ?? 5)
   },
 })
 
