@@ -94,10 +94,13 @@ export async function POST(request: NextRequest) {
 
       const greetingResponse = `[TriggerDev Bot] Hey there! 👋 I'm TriggerDev, your AI assistant. What would you like to know?`
       
-      return NextResponse.json({
+      const greetingRes = NextResponse.json({
         version: 'v2',
         messages: [{ text: greetingResponse }],
+        _timestamp: Date.now(),
       })
+      greetingRes.headers.set('Cache-Control', 'no-store, must-revalidate')
+      return greetingRes
     }
 
     // 4. If waiting for query, process normally and reset state
@@ -152,11 +155,14 @@ export async function POST(request: NextRequest) {
       await sendManyChatMessage(instagramUserId, answer)
     }
 
-    // 12. Return response to ManyChat
-    return NextResponse.json({
+    // 12. Return response to ManyChat (add timestamp to prevent caching)
+    const response = NextResponse.json({
       version: 'v2',
       messages: [{ text: answer }],
+      _timestamp: Date.now(),
     })
+    response.headers.set('Cache-Control', 'no-store, must-revalidate')
+    return response
   } catch (error) {
     console.error('Chat API error:', error)
     return NextResponse.json(
