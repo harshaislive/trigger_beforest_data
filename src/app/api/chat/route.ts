@@ -41,11 +41,13 @@ async function sendManyChatMessage(subscriberId: string, message: string) {
         data: {
           version: 'v2',
           content: {
+            type: 'instagram',
             messages: [
               { type: 'text', text: message },
             ],
           },
         },
+        message_tag: 'POST_PURCHASE_UPDATE',
       }),
     })
 
