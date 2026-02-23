@@ -71,7 +71,18 @@ export async function POST(request: NextRequest) {
       sources,
     })
 
-    return NextResponse.json({ answer, sources })
+    // ManyChat expects this format
+    return NextResponse.json({
+      version: 'v2',
+      content: {
+        messages: [
+          {
+            type: 'text',
+            text: answer,
+          },
+        ],
+      },
+    })
   } catch (error) {
     console.error('Chat API error:', error)
     return NextResponse.json(
