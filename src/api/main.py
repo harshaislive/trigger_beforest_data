@@ -190,6 +190,28 @@ def apply_brand_no_info_override(user_message: str, answer: str) -> str:
     return answer
 
 
+def humanize_manager_voice(answer: str) -> str:
+    replacements = {
+        "based on my research": "",
+        "from my research": "",
+        "according to my research": "",
+        "from my context": "",
+        "in my context": "",
+        "according to my memory": "",
+        "from conversation memory": "",
+        "knowledge base": "current details",
+        "i do not have this in my context": "I do not have that detail yet",
+    }
+
+    out = answer
+    for src, dst in replacements.items():
+        out = re.sub(rf"\b{re.escape(src)}\b", dst, out, flags=re.IGNORECASE)
+
+    out = re.sub(r"\s{2,}", " ", out).strip()
+    out = out.replace(" .", ".").replace(" ,", ",")
+    return out
+
+
 def should_use_structured_bewild_lookup(message: str) -> bool:
     lower = message.lower()
     asks_products = any(k in lower for k in ("product", "produce", "available", "catalog", "shop"))
@@ -437,6 +459,7 @@ async def chat(request: ManyChatRequest):
             answer = "I'm thinking... give me a moment."
 
     answer = answer.replace("\u2014", "-").replace("\u2013", "-")
+    answer = humanize_manager_voice(answer)
     answer = enforce_canonical_brand_domains(answer)
     answer = apply_brand_no_info_override(request.message, answer)
 
