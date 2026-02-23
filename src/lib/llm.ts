@@ -79,12 +79,12 @@ export async function generateAnswer(
   const contextSection = context ? `Context from knowledge base:\n${context}\n` : ''
   
   const systemPrompt = `You are TriggerDev - an AI assistant that helps users. ${contextSection}
+IMPORTANT: Start EVERY response with this exact phrase: "[TriggerDev Bot] "
 Instructions:
 - Answer based on the context provided if available
 - If no context is available, answer based on your general knowledge
 - If you truly don't know something, say so honestly
-- Be helpful, concise and direct
-- Don't start every response with "Hi" or greetings`
+- Be helpful, concise and direct`
 
   const messages: LLMMessage[] = [
     ...chatHistory.map(msg => ({
