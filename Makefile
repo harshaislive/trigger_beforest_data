@@ -1,4 +1,4 @@
-.PHONY: install dev run convex sync-kb
+.PHONY: install dev run convex sync-kb crawl-sites sync-embeddings
 
 install:
 	uv sync
@@ -14,3 +14,9 @@ convex:
 
 sync-kb:
 	uv run python scripts/sync_beforest_data_to_convex.py
+
+crawl-sites:
+	python3 scripts/crawl_sitemaps_to_convex.py
+
+sync-embeddings:
+	python3 scripts/sync_openai_embeddings.py

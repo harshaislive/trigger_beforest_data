@@ -184,6 +184,88 @@ class ConvexClient:
             "contactId": contact_id,
         })
 
+    def upsert_crawl_url(
+        self,
+        domain: str,
+        url: str,
+        status: str,
+        page_type: Optional[str] = None,
+        source: Optional[str] = None,
+        lastmod: Optional[str] = None,
+        content_hash: Optional[str] = None,
+        title: Optional[str] = None,
+        error: Optional[str] = None,
+    ) -> str:
+        return self._mutation("chat:upsertCrawlUrl", {
+            "domain": domain,
+            "url": url,
+            "pageType": page_type,
+            "source": source,
+            "lastmod": lastmod,
+            "contentHash": content_hash,
+            "title": title,
+            "status": status,
+            "error": error,
+        })
+
+    def upsert_product(
+        self,
+        brand: str,
+        domain: str,
+        name: str,
+        url: str,
+        category: Optional[str] = None,
+        availability: Optional[str] = None,
+        price_text: Optional[str] = None,
+        source: Optional[str] = None,
+        content_hash: Optional[str] = None,
+    ) -> str:
+        return self._mutation("chat:upsertProduct", {
+            "brand": brand,
+            "domain": domain,
+            "name": name,
+            "url": url,
+            "category": category,
+            "availability": availability,
+            "priceText": price_text,
+            "source": source,
+            "contentHash": content_hash,
+        })
+
+    def get_products_by_brand(self, brand: str, limit: int = 50) -> List[Dict[str, Any]]:
+        return self._query("chat:getProductsByBrand", {
+            "brand": brand,
+            "limit": limit,
+        })
+
+    def list_knowledge_items(self, limit: int = 1000) -> List[Dict[str, Any]]:
+        return self._query("chat:listKnowledgeItems", {"limit": limit})
+
+    def upsert_knowledge_embedding(
+        self,
+        knowledge_item_id: str,
+        embedding: List[float],
+        embedding_model: str,
+    ) -> str:
+        return self._mutation("chat:upsertKnowledgeEmbedding", {
+            "knowledgeItemId": knowledge_item_id,
+            "embedding": embedding,
+            "embeddingModel": embedding_model,
+        })
+
+    def semantic_search_knowledge_base(
+        self,
+        query_embedding: List[float],
+        limit: int = 5,
+    ) -> List[Dict[str, Any]]:
+        return self._query("chat:semanticSearchKnowledgeBase", {
+            "queryEmbedding": query_embedding,
+            "limit": limit,
+        })
+
+    def get_crawl_url_by_url(self, url: str) -> Optional[Dict[str, Any]]:
+        return self._query("chat:getCrawlUrlByUrl", {"url": url})
+
 
 # Global client instance - initialized lazily
 convex_client = None

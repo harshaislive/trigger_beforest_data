@@ -190,6 +190,82 @@ def apply_brand_no_info_override(user_message: str, answer: str) -> str:
     return answer
 
 
+def should_use_structured_bewild_lookup(message: str) -> bool:
+    lower = message.lower()
+    asks_products = any(k in lower for k in ("product", "produce", "available", "catalog", "shop"))
+    return "bewild" in lower and asks_products
+
+
+def build_bewild_products_response(products: list[dict]) -> Optional[str]:
+    if not products:
+        return None
+
+    names = []
+    categories = []
+    seen_names = set()
+    seen_categories = set()
+
+    for item in products:
+        name = (item.get("name") or "").strip()
+        category = (item.get("category") or "").strip()
+
+        if name and name.lower() not in seen_names and len(names) < 8:
+            names.append(name)
+            seen_names.add(name.lower())
+
+        if category and category.lower() not in seen_categories and len(categories) < 5:
+            categories.append(category)
+            seen_categories.add(category.lower())
+
+    if not names:
+        return None
+
+    category_text = ", ".join(categories) if categories else "multiple produce and pantry categories"
+    name_text = ", ".join(names[:6])
+    return (
+        f"On bewild.life, we currently list products across {category_text}. "
+        f"Some available items include {name_text}. "
+        "If you want, I can narrow this to coffee, grains, spices, or weekly produce picks."
+    )
+
+
+def should_use_fast_kb_path(message: str) -> bool:
+    lower = message.lower()
+    brand_terms = ("beforest", "bewild", "hospitality", "experiences", "10percent")
+    info_terms = ("what", "about", "products", "produce", "available", "where", "which", "tell me")
+    return any(b in lower for b in brand_terms) and any(t in lower for t in info_terms)
+
+
+def build_fast_kb_response(query: str, kb_rows: list[dict]) -> Optional[str]:
+    if not kb_rows:
+        return None
+
+    titles = []
+    points = []
+    seen_titles = set()
+
+    for row in kb_rows[:3]:
+        title = (row.get("title") or row.get("url") or "").strip()
+        content = " ".join((row.get("content") or "").split())
+        if title and title.lower() not in seen_titles:
+            titles.append(title)
+            seen_titles.add(title.lower())
+        if content:
+            snippet = content[:220].rstrip()
+            points.append(snippet)
+
+    if not points:
+        return None
+
+    source_text = ", ".join(titles[:3]) if titles else "our current knowledge base"
+    summary = points[0]
+    return (
+        f"Here is what we currently have from {source_text}. "
+        f"{summary} "
+        "If you want, I can break this down into exact options and next step for you."
+    )
+
+
 def infer_lead_signals(message: str) -> dict:
     lower = message.lower()
 
@@ -327,11 +403,35 @@ async def chat(request: ManyChatRequest):
         answer = "Hey. I'm Forest Guide at Beforest. What would you like to know?"
     else:
         try:
-            answer = run_crew(
-                message=request.message,
-                contact_id=request.contact_id,
-                name=request.name or "User",
-            )
+            client = get_convex_client()
+            if should_use_structured_bewild_lookup(request.message):
+                products = client.get_products_by_brand("bewild", limit=40)
+                override = build_bewild_products_response(products)
+                if override:
+                    answer = override
+                else:
+                    answer = run_crew(
+                        message=request.message,
+                        contact_id=request.contact_id,
+                        name=request.name or "User",
+                    )
+            elif should_use_fast_kb_path(request.message):
+                kb_rows = client.search_knowledge_base(request.message, limit=3)
+                quick = build_fast_kb_response(request.message, kb_rows)
+                if quick:
+                    answer = quick
+                else:
+                    answer = run_crew(
+                        message=request.message,
+                        contact_id=request.contact_id,
+                        name=request.name or "User",
+                    )
+            else:
+                answer = run_crew(
+                    message=request.message,
+                    contact_id=request.contact_id,
+                    name=request.name or "User",
+                )
         except Exception as e:
             print(f"Crew error: {e}")
             answer = "I'm thinking... give me a moment."

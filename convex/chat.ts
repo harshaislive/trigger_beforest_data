@@ -50,6 +50,22 @@ function bm25Score(tf: number, df: number, docLength: number, avgDocLength: numb
   return idf * ((tf * (k1 + 1)) / (tf + norm))
 }
 
+function cosineSimilarity(a: number[], b: number[]): number {
+  if (!a.length || !b.length || a.length !== b.length) return 0
+  let dot = 0
+  let magA = 0
+  let magB = 0
+  for (let i = 0; i < a.length; i += 1) {
+    const x = a[i]
+    const y = b[i]
+    dot += x * y
+    magA += x * x
+    magB += y * y
+  }
+  if (magA === 0 || magB === 0) return 0
+  return dot / (Math.sqrt(magA) * Math.sqrt(magB))
+}
+
 export const getOrCreateUser = mutation({
   args: { 
     telegramUserId: v.optional(v.string()), 
@@ -387,6 +403,129 @@ export const upsertKnowledgeItem = mutation({
   },
 })
 
+export const upsertCrawlUrl = mutation({
+  args: {
+    domain: v.string(),
+    url: v.string(),
+    pageType: v.optional(v.string()),
+    source: v.optional(v.string()),
+    lastmod: v.optional(v.string()),
+    contentHash: v.optional(v.string()),
+    title: v.optional(v.string()),
+    status: v.string(),
+    error: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now()
+    const existing = await ctx.db
+      .query('crawlUrls')
+      .withIndex('by_url', (q) => q.eq('url', args.url))
+      .first()
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        domain: args.domain,
+        pageType: args.pageType,
+        source: args.source,
+        lastmod: args.lastmod,
+        contentHash: args.contentHash,
+        title: args.title,
+        status: args.status,
+        error: args.error,
+        lastCrawledAt: now,
+        updatedAt: now,
+      })
+      return existing._id
+    }
+
+    return await ctx.db.insert('crawlUrls', {
+      domain: args.domain,
+      url: args.url,
+      pageType: args.pageType,
+      source: args.source,
+      lastmod: args.lastmod,
+      contentHash: args.contentHash,
+      title: args.title,
+      status: args.status,
+      error: args.error,
+      lastCrawledAt: now,
+      createdAt: now,
+      updatedAt: now,
+    })
+  },
+})
+
+export const upsertProduct = mutation({
+  args: {
+    brand: v.string(),
+    domain: v.string(),
+    name: v.string(),
+    url: v.string(),
+    category: v.optional(v.string()),
+    availability: v.optional(v.string()),
+    priceText: v.optional(v.string()),
+    source: v.optional(v.string()),
+    contentHash: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now()
+    const existing = await ctx.db
+      .query('products')
+      .withIndex('by_url', (q) => q.eq('url', args.url))
+      .first()
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        brand: args.brand,
+        domain: args.domain,
+        name: args.name,
+        category: args.category,
+        availability: args.availability,
+        priceText: args.priceText,
+        source: args.source,
+        contentHash: args.contentHash,
+        updatedAt: now,
+      })
+      return existing._id
+    }
+
+    return await ctx.db.insert('products', {
+      brand: args.brand,
+      domain: args.domain,
+      name: args.name,
+      url: args.url,
+      category: args.category,
+      availability: args.availability,
+      priceText: args.priceText,
+      source: args.source,
+      contentHash: args.contentHash,
+      createdAt: now,
+      updatedAt: now,
+    })
+  },
+})
+
+export const getProductsByBrand = query({
+  args: { brand: v.string(), limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query('products')
+      .withIndex('by_brand', (q) => q.eq('brand', args.brand))
+      .take(args.limit ?? 50)
+    return rows
+  },
+})
+
+export const getCrawlUrlByUrl = query({
+  args: { url: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query('crawlUrls')
+      .withIndex('by_url', (q) => q.eq('url', args.url))
+      .first()
+  },
+})
+
 export const getRecentKnowledgeItems = query({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
@@ -395,6 +534,47 @@ export const getRecentKnowledgeItems = query({
       .order('desc')
       .take(args.limit ?? 10)
     return items.reverse()
+  },
+})
+
+export const listKnowledgeItems = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    return await ctx.db.query('knowledgeItems').take(args.limit ?? 1000)
+  },
+})
+
+export const upsertKnowledgeEmbedding = mutation({
+  args: {
+    knowledgeItemId: v.id('knowledgeItems'),
+    embedding: v.array(v.number()),
+    embeddingModel: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.knowledgeItemId, {
+      embedding: args.embedding,
+      embeddingModel: args.embeddingModel,
+      embeddingUpdatedAt: Date.now(),
+    })
+    return args.knowledgeItemId
+  },
+})
+
+export const semanticSearchKnowledgeBase = query({
+  args: { queryEmbedding: v.array(v.number()), limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const allItems = await ctx.db.query('knowledgeItems').take(1000)
+    const scored = allItems
+      .filter((item) => !!item.embedding && item.embedding.length === args.queryEmbedding.length)
+      .map((item) => ({
+        item,
+        score: cosineSimilarity(item.embedding!, args.queryEmbedding),
+      }))
+      .filter((row) => row.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, args.limit ?? 5)
+      .map((row) => row.item)
+    return scored
   },
 })
 

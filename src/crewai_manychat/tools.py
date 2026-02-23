@@ -40,7 +40,7 @@ class BraveSearchTool(BaseTool):
                 "https://api.search.brave.com/res/v1/web/search",
                 headers={"X-Subscription-Token": api_key},
                 params={"q": effective_query, "count": count},
-                timeout=20,
+                timeout=10,
             )
             response.raise_for_status()
             data = response.json()
@@ -113,7 +113,7 @@ class URLContentTool(BaseTool):
         try:
             response = requests.get(
                 url,
-                timeout=20,
+                timeout=10,
                 headers={
                     "User-Agent": (
                         "Mozilla/5.0 (X11; Linux x86_64) "
@@ -157,6 +157,50 @@ class RAGSearchTool(BaseTool):
         "experiences": "experiences.beforest.co.md",
         "10percent": "10percent.beforest.co.md",
     }
+
+    @staticmethod
+    def _embed_query_openai(query: str) -> list[float] | None:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            return None
+
+        model = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
+        try:
+            response = requests.post(
+                "https://api.openai.com/v1/embeddings",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={"model": model, "input": query},
+                timeout=8,
+            )
+            response.raise_for_status()
+            data = response.json()
+            rows = data.get("data", [])
+            if not rows:
+                return None
+            vector = rows[0].get("embedding")
+            if isinstance(vector, list) and vector:
+                return [float(x) for x in vector]
+            return None
+        except Exception:
+            return None
+
+    @staticmethod
+    def _merge_results(primary: list[dict], secondary: list[dict], limit: int = 5) -> list[dict]:
+        merged: list[dict] = []
+        seen: set[str] = set()
+
+        for row in primary + secondary:
+            key = row.get("url") or row.get("title") or ""
+            if key in seen:
+                continue
+            merged.append(row)
+            seen.add(key)
+            if len(merged) >= limit:
+                break
+        return merged
 
     @staticmethod
     def _search_local_beforest_data(query: str, limit: int = 5):
@@ -238,7 +282,15 @@ class RAGSearchTool(BaseTool):
         from .convex_client import get_convex_client
         
         try:
-            results = get_convex_client().search_knowledge_base(query, limit=5)
+            client = get_convex_client()
+            lexical = client.search_knowledge_base(query, limit=5)
+            semantic = []
+            query_embedding = self._embed_query_openai(query)
+            if query_embedding:
+                semantic = client.semantic_search_knowledge_base(query_embedding, limit=5)
+
+            results = self._merge_results(semantic, lexical, limit=5)
+
             if not results:
                 results = self._search_local_beforest_data(query, limit=5)
                 if not results:

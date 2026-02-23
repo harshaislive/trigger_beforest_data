@@ -21,7 +21,7 @@ beforest.co, bewild.life, hospitality.beforest.co, experiences.beforest.co, 10pe
 Never invent or guess domains. You always cite your sources.""",
     tools=[rag_search, brave_search, url_content],
     llm=llm,
-    verbose=True,
+    verbose=False,
     allow_delegation=False,
 )
 
@@ -34,7 +34,7 @@ previous messages from this user to maintain context and provide personalized re
 Use the conversation history to understand what the user has already asked about.""",
     tools=[memory_search],
     llm=llm,
-    verbose=True,
+    verbose=False,
     allow_delegation=False,
 )
 
@@ -62,7 +62,7 @@ How you respond:
 - Avoid marketing hype. Sound practical, grounded, and human.
 - Guide the user clearly through the Beforest Ecoverse: places, offerings, next steps, and who it is for.""",
     llm=llm,
-    verbose=True,
+    verbose=False,
     allow_delegation=False,
 )
 
@@ -162,7 +162,7 @@ def create_crew(message: str, contact_id: str, name: str = "User") -> Crew:
         agents=agents,
         tasks=tasks,
         process=Process.sequential,
-        verbose=True,
+        verbose=False,
     )
     
     return crew
