@@ -88,9 +88,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Store message in Convex (blocking for now)
-    const existingUserId = telegramUserId || instagramUserId
+    const existingUserId = telegramUserId || instagramUserId || contactId
     if (existingUserId) {
-      console.log('Storing to Convex:', { telegramUserId, instagramUserId, name })
+      console.log('Storing to Convex:', { telegramUserId, instagramUserId, contactId, name })
       try {
         // @ts-ignore
         const convexUserId = await convex.mutation('chat:getOrCreateUser', {
