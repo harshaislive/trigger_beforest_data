@@ -146,17 +146,28 @@ export async function POST(request: NextRequest) {
 
       // Search knowledge base
       let context = ''
+      let sources = ''
       try {
         // @ts-ignore
         const knowledgeItems = await convex.query('chat:searchKnowledgeBase', { query: message, limit: 3 })
         console.log('Knowledge items found:', knowledgeItems?.length || 0)
         if (knowledgeItems && knowledgeItems.length > 0) {
-          context = knowledgeItems.map((item: { content: string }) => item.content).join('\n\n')
+          context = knowledgeItems.map((item: { content: string; title?: string }) => 
+            `[${item.title || 'Beforest'}] ${item.content}`
+          ).join('\n\n')
+          
+          const urls = knowledgeItems.map((item: { url?: string }) => item.url).filter(Boolean)
+          if (urls.length > 0) {
+            sources = `\n\nSources: ${urls.join(', ')}`
+          }
           console.log('Context length:', context.length)
         }
       } catch (error) {
         console.error('Knowledge base error:', error)
       }
+
+      // Append sources to context
+      context = context + sources
 
       // Fallback to Brave Search if no context
       if (!context && BRAVE_API_KEY) {
