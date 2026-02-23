@@ -87,23 +87,30 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Store message in Convex (non-blocking)
+    // Store message in Convex (blocking for now)
     const existingUserId = telegramUserId || instagramUserId
     if (existingUserId) {
-      // @ts-ignore
-      convex.mutation('chat:getOrCreateUser', {
-        telegramUserId: telegramUserId || undefined,
-        instagramUserId: instagramUserId || undefined,
-        name,
-      }).then((convexUserId: string) => {
+      console.log('Storing to Convex:', { telegramUserId, instagramUserId, name })
+      try {
         // @ts-ignore
-        convex.mutation('chat:storeChatMessage', {
+        const convexUserId = await convex.mutation('chat:getOrCreateUser', {
+          telegramUserId: telegramUserId || undefined,
+          instagramUserId: instagramUserId || undefined,
+          name,
+        })
+        console.log('Got convex user ID:', convexUserId)
+        
+        // @ts-ignore
+        await convex.mutation('chat:storeChatMessage', {
           userId: convexUserId,
           message,
           response: answer,
           sources: [],
-        }).catch(console.error)
-      }).catch(console.error)
+        })
+        console.log('Stored chat message in Convex')
+      } catch (error) {
+        console.error('Convex error:', error)
+      }
     }
 
     // Send via ManyChat API (non-blocking)
