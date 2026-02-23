@@ -26,7 +26,7 @@ export async function callLLM(
     ? [{ role: 'system' as const, content: systemPrompt }, ...messages]
     : messages
 
-  console.log('Calling Minimax API with:', { model: 'claude-3-5-sonnet-20241022', messageCount: allMessages.length })
+  console.log('Calling Minimax API with:', { model: 'MiniMax-M2.5', messageCount: allMessages.length })
 
   const response = await fetch(`${MINIMAX_API_URL}/v1/messages`, {
     method: 'POST',
