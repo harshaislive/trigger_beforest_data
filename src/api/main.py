@@ -14,6 +14,7 @@ app = FastAPI(title="CrewAI ManyChat")
 
 MANYCHAT_API_KEY = os.getenv("MANYCHAT_API_KEY")
 MANYCHAT_API_URL = "https://api.manychat.com/fb/sending/sendContent"
+MANYCHAT_PUSH_MODE = os.getenv("MANYCHAT_PUSH_MODE", "false").lower() == "true"
 
 GREETINGS = [
     "hi",
@@ -110,10 +111,13 @@ def send_manychat_message(subscriber_id: str, message: str) -> dict:
     return response.json()
 
 
-def split_message_chunks(text: str, max_chars: int = 240) -> list[str]:
+def split_message_chunks(text: str, max_chars: int = 420) -> list[str]:
     cleaned = text.replace("\u2014", "-").replace("\u2013", "-").strip()
     if not cleaned:
         return [""]
+
+    if len(cleaned) <= max_chars:
+        return [cleaned]
 
     parts = [p.strip() for p in re.split(r"(?<=[.!?])\s+", cleaned) if p.strip()]
     chunks: list[str] = []
@@ -148,7 +152,12 @@ def split_message_chunks(text: str, max_chars: int = 240) -> list[str]:
     if current:
         chunks.append(current)
 
-    return chunks or [cleaned]
+    if len(chunks) <= 2:
+        return chunks
+
+    first = " ".join(chunks[: len(chunks) // 2]).strip()
+    second = " ".join(chunks[len(chunks) // 2 :]).strip()
+    return [c for c in [first, second] if c]
 
 
 def enforce_canonical_brand_domains(text: str) -> str:
@@ -517,10 +526,11 @@ async def chat(request: ManyChatRequest):
     except Exception as e:
         print(f"Convex store error: {e}")
 
-    try:
-        send_manychat_message(request.contact_id, answer)
-    except Exception as e:
-        print(f"ManyChat send error: {e}")
+    if MANYCHAT_PUSH_MODE:
+        try:
+            send_manychat_message(request.contact_id, answer)
+        except Exception as e:
+            print(f"ManyChat send error: {e}")
 
     return ManyChatResponse(
         messages=[{"text": chunk} for chunk in split_message_chunks(answer)],
